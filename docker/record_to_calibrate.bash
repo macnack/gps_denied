@@ -1,0 +1,59 @@
+ros2 bag record -s mcap /pix_hooke/a2v_brakectrl_131 \
+/pix_hooke/a2v_drivectrl_130 \
+/pix_hooke/a2v_steerctrl_132 \
+/pix_hooke_driver/control_command/engage \
+/control/command/actuation_cmd \
+/control/command/gear_cmd \
+/pix_hooke/v2a_drivestafb \
+/api/operation_mode/state \
+/pix_hooke/v2a_brakestafb \
+/pix_hooke/v2a_drivestafb \
+/pix_hooke/v2a_steerstafb \
+/pix_hooke/v2a_vehiclestafb \
+/pix_hooke/v2a_vehicleworkstafb \
+/vehicle/status/actuation_status \
+/vehicle/status/control_mode \
+/vehicle/status/door_status \
+/vehicle/status/gear_status \
+/vehicle/status/hazard_lights_status \
+/vehicle/status/steering_status \
+/vehicle/status/steering_wheel_status \
+/vehicle/status/turn_indicators_status \
+/vehicle/status/velocity_status \
+/pix_hooke/v2a_chassiswheelanglefb \
+/pix_hooke/v2a_chassiswheelrpmfb \
+/pix_hooke/v2a_chassiswheeltirepressfb \
+/pix_hooke/v2a_drivestafb \
+/pix_hooke/v2a_powerstafb \
+/pix_hooke/v2a_steerstafb \
+/pix_hooke/v2a_vehiclefltsta \
+/pix_hooke/v2a_vehiclestafb \
+/pix_hooke/v2a_vehicleworkstafb \
+/localization/pose_estimator/pose_with_covariance \
+/localization/twist_estimator/twist_with_covariance \
+/localization/pose_twist_fusion_filter/biased_pose \
+/localization/pose_twist_fusion_filter/biased_pose_with_covariance \
+/localization/pose_twist_fusion_filter/ekf_fake_imu \
+/localization/pose_twist_fusion_filter/estimated_yaw_bias \
+/localization/pose_twist_fusion_filter/kinematic_state \
+/localization/pose_twist_fusion_filter/pose \
+/localization/pose_twist_fusion_filter/twist \
+/localization/pose_twist_fusion_filter/twist_with_covariance \
+/localization/pose_with_covariance \
+/sensing/imu/imu_data \
+/sensing/imu/imu_raw \
+/sensing/gnss/ublox_moving_base_node/fix \
+/sensing/gnss/ublox_moving_base_node/navrelposned \
+/sensing/gnss/ublox_rover_node/fix \
+/sensing/gnss/ublox_rover_node/navrelposned \
+/sensing/gnss/autoware_orientation \
+/sensing/gnss/gnss_transforms/moving_base_pose \
+/sensing/gnss/gnss_transforms/moving_base_pose_cov \
+/sensing/gnss/gnss_transforms/rear_axis_pose \
+/sensing/gnss/gnss_transforms/rear_axis_pose_cov \
+/sensing/gnss/gnss_transforms/rover_pose \
+/sensing/gnss/gnss_transforms/rover_pose_cov \
+/sensing/gnss/gnss_transforms_node/output/rtk_fix_status
+
+
+
