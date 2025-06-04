@@ -27,7 +27,9 @@ RUN pip install --upgrade --no-cache-dir pip \
         matplotlib==3.8.4 \
         torch==2.2.2 \
         torchvision==0.17.2 \
-        opencv-python-headless==4.10.0.82
+        opencv-python-headless==4.10.0.82 \
+        requests \
+        neptune
 
 ######################################################################
 # 3. Workspace

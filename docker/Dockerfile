@@ -47,7 +47,8 @@ RUN pip install --no-cache-dir \
     matplotlib==2.0.2 \
     torch==1.0.0 \
     torchvision==0.2.0 \
-    opencv-python
+    opencv-python \
+    requests
 # --------------------------------------------------------------------
 # 3. Build OpenCV 3.3.0 (Python 3 bindings only)
 # --------------------------------------------------------------------
