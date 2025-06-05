@@ -52,7 +52,7 @@ class ImageDataset(Dataset):
         self.device    = torch.device(device)
 
         # reusable helpers
-        self.inverse   = dlk.InverseBatch()          # same object for every call
+        # self.inverse   = dlk.InverseBatch()          # same object for every call
 
     # ------------------------------------------------------------------ #
 
@@ -126,7 +126,7 @@ class ImageDataset(Dataset):
         #  → we want 'img_tensor_w' such that template == warp(img_tensor_w, p_gt)
         img_tensor_4d = img_tensor.unsqueeze(0).to(self.device)         # [1,3,H,W]
         H             = dlk.param_to_H(p_gt.unsqueeze(0))               # [1,3,3]
-        H_inv         = self.inverse.apply(H)
+        H_inv         = torch.linalg.inv(H)
         img_w, _      = dlk.warp_hmg(img_tensor_4d, dlk.H_to_param(H_inv))
         img_tensor_w  = img_w.squeeze(0)                                # back to [3,H,W]
 
