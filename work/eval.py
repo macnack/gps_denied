@@ -63,7 +63,7 @@ if __name__ == "__main__":
 	DATAPATH = args.DATAPATH
 	MODEL_PATH = args.MODEL_PATH
 	VGG_MODEL_PATH = args.VGG_MODEL_PATH
-
+	DEVICE = args.device
 	if VGG_MODEL_PATH == 'x':
 		VGG_MODEL_PATH = None
   
@@ -74,7 +74,7 @@ if __name__ == "__main__":
 			TEST_DATA_SAVE_PATH = args.TEST_DATA_SAVE_PATH
 
 def train():
-    device = torch.device('cuda' if USE_CUDA else 'cpu')
+    device = torch.device(f'cuda:{DEVICE}' if USE_CUDA else 'cpu')
     run = neptune.init_run(
     project="maciej.krupka/gps-denied",
     api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
