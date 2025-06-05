@@ -7,7 +7,7 @@ import random
 from math import sin, cos, pi, radians
 import model as dlk
 from pathlib import Path
-
+from evaluate import data_generator
 
 class ImageDataset(Dataset):
     """
@@ -123,7 +123,7 @@ class ImageDataset(Dataset):
         #  → we want 'img_tensor_w' such that template == warp(img_tensor_w, p_gt)
         img_tensor_4d = img_tensor.unsqueeze(0).to(self.device)         # [1,3,H,W]
         H             = dlk.param_to_H(p_gt.unsqueeze(0))               # [1,3,3]
-        H_inv         = self.inverse(H)
+        H_inv         = self.inverse.apply(H)
         img_w, _      = dlk.warp_hmg(img_tensor_4d, dlk.H_to_param(H_inv))
         img_tensor_w  = img_w.squeeze(0)                                # back to [3,H,W]
 
@@ -153,18 +153,56 @@ if __name__ == "__main__":
     }
 
     dataset = ImageDataset(
-        img_dir='/home/user/work/sat_data/woodbridge/images',
+        img_dir='/home/user/work/sat_data/test',
         training_sz=100,
         training_sz_pad=120,
         param_ranges=param_ranges,
         transform=transforms.ToTensor(),
-        device='cuda'  # or 'cpu'
+        device='cpu'  # or 'cpu'
     )
 
     dataloader = DataLoader(dataset, batch_size=10, shuffle=True)
     # how to check if the dataloader works
+    img_batch_n = None
     for img_batch, template_batch, param_batch in dataloader:
+        print("DATALOADER")
+        img_batch_n = img_batch
         print("Image batch shape:", img_batch.shape)
         print("Template batch shape:", template_batch.shape)
         print("Parameter batch shape:", param_batch.shape)
         break  # remove this to iterate through the entire dataset
+    minibatch_sz = 10
+    num_minibatch = 25000
+    training_sz = 175
+
+    from torch.autograd import Variable
+
+    img_train_data = Variable(torch.zeros(num_minibatch, 3, training_sz, training_sz))
+    template_train_data = Variable(torch.zeros(num_minibatch, 3, training_sz, training_sz))
+    param_train_data = Variable(torch.zeros(num_minibatch, 8, 1))
+    for i in range(round(num_minibatch / minibatch_sz)):
+        print('gathering training data...', i+1, ' / ', num_minibatch / minibatch_sz)
+        batch_index = i * minibatch_sz
+        img_batch, template_batch, param_batch = data_generator(minibatch_sz)
+        img_train_data[batch_index:batch_index + minibatch_sz, :, :, :] = img_batch
+        template_train_data[batch_index:batch_index + minibatch_sz, :, :, :] = template_batch
+        param_train_data[batch_index:batch_index + minibatch_sz, :, :] = param_batch
+        print("Image batch shape from data_generator:", img_batch.shape)
+        print("Template batch shape from data_generator:", template_batch.shape)
+        print("Parameter batch shape from data_generator:", param_batch.shape)
+        print("img_train_data shape:", img_train_data.shape)
+        print("template_train_data shape:", template_train_data.shape)
+        print("param_train_data shape:", param_train_data.shape)
+    
+        print('training data gathered')
+        break
+    print("Training data shapes:")
+    
+    #save to csv img_train_data
+    import pandas as pd
+    img_train_data_np = img_train_data.numpy().reshape(num_minibatch, -1)
+    img_train_df = pd.DataFrame(img_train_data_np)
+    img_train_df.to_csv('img_train_data.csv', index=False)
+    img_batch_n_np = img_batch_n.numpy().reshape(1, -1)
+    img_batch_n_df = pd.DataFrame(img_batch_n_np)
+    img_batch_n_df.to_csv('img_batch_n.csv', index=False)

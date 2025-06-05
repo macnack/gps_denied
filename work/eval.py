@@ -9,7 +9,7 @@ import gc
 import os
 import neptune
 import torch.multiprocessing as mp
-
+from torchinfo import summary
 USE_CUDA = torch.cuda.is_available()
 # size scale range
 min_scale = 0.75
@@ -67,11 +67,13 @@ def train():
     api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
     )  # your credentials
 
-    VGG_MODEL_PATH = None
     # Initialize model
     dlk_net = dlk.DeepLK(dlk.vgg16Conv(VGG_MODEL_PATH)).to(device)
-    lr = 0.0001
+    # summary(dlk_net, input_size=[(1, 3, 128, 128), (1, 3, 128, 128)])
 
+    lr = 0.0001
+    epoch = 10
+    batch_size = 1
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, dlk_net.parameters()), lr=lr)
     run["parameters"] = {
     "min_scale": min_scale,
@@ -82,7 +84,8 @@ def train():
     "training_sz": training_sz,
     "training_sz_pad": training_sz_pad,
     "lr": lr,
-    "epochs": 5,
+    "epochs": epoch,
+    "batch_size" : batch_size,
     }
     # Dataset and DataLoader setup
     param_ranges = {
@@ -102,6 +105,7 @@ def train():
         training_sz=training_sz,
         training_sz_pad=training_sz_pad,
         param_ranges=param_ranges,
+        num_samples =100,
         transform=transform,
         device=device
     )
@@ -111,17 +115,19 @@ def train():
         training_sz=training_sz,
         training_sz_pad=training_sz_pad,
         param_ranges=param_ranges,
+        num_samples =10,
         transform=transform,
         device=device
     )
 
-    train_loader = DataLoader(dataset, batch_size=10, shuffle=True, num_workers=0)
-    valid_loader = DataLoader(valid_dataset, batch_size=10, shuffle=False, num_workers=0)
-
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    # train loader size
+    print(len(dataset))
     best_valid_loss = float('inf')
 
     print('Training...')
-    for epoch in range(1, 6):  # small number of epochs, increase if needed
+    for epoch in range(1, epoch):  # small number of epochs, increase if needed
         dlk_net.train()
         for batch_idx, (img_batch, template_batch, param_batch) in enumerate(train_loader):
             optimizer.zero_grad()
@@ -137,9 +143,26 @@ def train():
             run["train/loss"].log(loss.item())
 
             loss.backward()
+            
+            # total_norm = 0
+            # for name, param in dlk_net.named_parameters():
+                # print(name, param.grad is None, param.grad.norm() if param.grad is not None else 0)
+            # for p in dlk_net.parameters():
+            #     param_norm = p.grad.data.norm(2)
+            #     total_norm += param_norm.item() ** 2
+            # total_norm = total_norm ** (1. / 2)
+            # run["train/grad_norm"].log(total_norm)
+            # run["train/learning_rate"].log(optimizer.param_groups[0]['lr'])
             optimizer.step()
+            
+            total_weight_norm = 0.0
+            for p in dlk_net.parameters():
+                param_norm = p.data.norm(2)
+                total_weight_norm += param_norm.item() ** 2
+            total_weight_norm = total_weight_norm ** 0.5
+            run["train/weight_norm"].log(total_weight_norm)
         
-            if batch_idx % 10 == 0:
+            if batch_idx % batch_size == 0:
                 print(f"Epoch {epoch}, Batch {batch_idx}, Training Loss: {loss.item():.6f}")
 
         # Validation
