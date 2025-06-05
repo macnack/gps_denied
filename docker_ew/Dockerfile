@@ -29,7 +29,9 @@ RUN pip install --upgrade --no-cache-dir pip \
         torchvision==0.17.2 \
         opencv-python-headless==4.10.0.82 \
         requests \
-        neptune
+        neptune \
+        torchinfo \
+        rich
 
 ######################################################################
 # 3. Workspace

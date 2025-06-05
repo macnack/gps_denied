@@ -5,11 +5,10 @@ from torchvision import transforms
 from torchvision import models
 from PIL import Image
 import sys
-from math import sin, cos, pi
-import DeepLKBatch as old
+# import DeepLKBatch as old
 import time
 from torchvision import models
-
+from math import sin, cos
 def normalize_img_batch(img: torch.Tensor) -> torch.Tensor:
     """
     Normalize a batch of images to zero mean and unit variance per channel.
@@ -224,38 +223,7 @@ def warp_hmg(img: torch.Tensor, p: torch.Tensor):
 
     return img_warp, mask
 
-class GradientBatch(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # Define Sobel-like gradient kernels
-        wx = torch.tensor([[-0.5, 0.0, 0.5]], dtype=torch.float32).view(1, 1, 1, 3)
-        wy = torch.tensor([[-0.5], [0.0], [0.5]], dtype=torch.float32).view(1, 1, 3, 1)
-        
-        # Register as buffers (so they move with the model to GPU if needed)
-        self.register_buffer('wx', wx)
-        self.register_buffer('wy', wy)
-
-        # Replication padding for proper border handling
-        self.padx_func = nn.ReplicationPad2d((1, 1, 0, 0))
-        self.pady_func = nn.ReplicationPad2d((0, 0, 1, 1))
-
-    def forward(self, img):
-        batch_size, k, h, w = img.size()
-
-        # Flatten channel dimension to apply the same kernel to each channel
-        img_reshaped = img.view(batch_size * k, 1, h, w)
-
-        # Pad and convolve in x direction
-        img_padx = self.padx_func(img_reshaped)
-        img_dx = F.conv2d(img_padx, self.wx).view(batch_size, k, h, w)
-
-        # Pad and convolve in y direction
-        img_pady = self.pady_func(img_reshaped)
-        img_dy = F.conv2d(img_pady, self.wy).view(batch_size, k, h, w)
-
-        return img_dx, img_dy
     
-
 class GradientBatch(nn.Module):
     def __init__(self):
         super().__init__()
@@ -445,6 +413,7 @@ if __name__ == "__main__":
     transforms.ToTensor(),
     ])
     img1 = Image.open(path).crop((xy[0], xy[1], xy[0] + sz, xy[1] + sz))
+    image = img1.copy()
     img1_coarse = preprocess(img1.resize((sz_sm, sz_sm)))
     img1 = preprocess(img1)
     print(img1.shape, img1_coarse.shape)
@@ -457,7 +426,7 @@ if __name__ == "__main__":
     translation_x = 0
     translation_y = 0
 
-    rad_ang = angle / 180 * pi
+    rad_ang = angle / 180 * torch.pi
 
     # Create transformation parameter tensor
     p = torch.tensor([
@@ -474,6 +443,27 @@ if __name__ == "__main__":
     # Reshape and repeat
     p = p.view(8, 1)
     pt = p.repeat(5, 1, 1)
+    print("##############################################################")
+    print("##############################################################")
+    print("##############################################################")
+    import cv2
+    import numpy as np    
+    height, width = image.size
+    H = np.array([
+    [1.4660, -0.5000, 0.0],
+    [0.5000,1.4660, 50.0],
+    [0.0, 0.0, 1.0000]
+    ], dtype=np.float32)
+    image = np.array(image)
+
+    print("Image size:", image.size)
+    warped_image = cv2.warpPerspective(image, H, dsize=(width, height))
+    cv2.imwrite("image.png", image)
+
+    cv2.imwrite("warped_image.png", warped_image)
+    print("H:", param_to_H(pt)[0])
+    # apply homography to image
+    # use param_to_H(pt) to image
     print("p shape:", p.shape)
     print("pt shape:", pt.shape)
     img1 = img1.repeat(5, 1, 1, 1)  # Repeat image for batch size of 5
