@@ -9,7 +9,7 @@ import model as dlk
 from pathlib import Path
 # from evaluate import data_generator
 random.seed(42)
-
+torch.manual_seed(42)
 class ImageDataset(Dataset):
     """
     Returns (warped_image, template_image, p_gt) for each index.
