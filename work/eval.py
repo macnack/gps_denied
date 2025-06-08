@@ -16,8 +16,8 @@ from datetime import datetime
 DEBUG = False
 USE_CUDA = torch.cuda.is_available()
 # USE_CUDA = False
-train_samples = 8
-valid_samples = 2
+train_samples = 512
+valid_samples = 128
 num_workers = 0
 validation_workers = num_workers
 # size scale range
@@ -92,7 +92,7 @@ def train():
     # summary(dlk_net, input_size=[(1, 3, 128, 128), (1, 3, 128, 128)])
 
     lr = 0.0001
-    num_epoch = 100
+    num_epoch = 10
     batch_size = 2
     gradiend_cliping_norm = 0.5
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, dlk_net.parameters()), lr=lr)
@@ -187,6 +187,7 @@ def train():
     
         avg_epoch_loss = epoch_loss / len(train_loader)
         run["train/epoch_loss"].log(avg_epoch_loss)
+        run["train/epoch"].log(epoch)
         log_epoch_loss(epoch, avg_epoch_loss)
         # Validation
         # should i empty cache here?
