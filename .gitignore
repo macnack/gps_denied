@@ -1,0 +1,31 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Environment files
+.env
+.venv/
+*.env
+
+# VSCode settings
+.vscode/
+
+# Neptune local cache/logs
+neptune.log
+neptune/
+.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Model checkpoints
+checkpoints/
+
+# Large data
+*.pt
+*.pth
