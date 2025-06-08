@@ -17,7 +17,8 @@ __pycache__/
 # Neptune local cache/logs
 neptune.log
 neptune/
-.log
+.neptune/
+*.log
 
 # OS files
 .DS_Store
