@@ -25,8 +25,8 @@ RUN pip install --upgrade --no-cache-dir pip \
         numpy==1.26.4 \
         scipy==1.11.4 \
         matplotlib==3.8.4 \
-        torch==2.2.2 \
-        torchvision==0.17.2 \
+        torch>=2.4.0 \
+        torchvision==0.22.0 \
         opencv-python-headless==4.10.0.82 \
         requests \
         neptune \
