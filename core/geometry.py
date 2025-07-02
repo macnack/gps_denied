@@ -1,5 +1,5 @@
 import torch
-from sampling import grid_bilinear_sampling
+from .sampling import grid_bilinear_sampling
 
 def H_to_param(H: torch.Tensor) -> torch.Tensor:
     """

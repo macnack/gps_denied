@@ -1,6 +1,48 @@
 import torch
 import torch.nn as nn
-from core.geometry import param_to_H
+from .geometry import param_to_H
+
+def corner_loss(p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float) -> torch.Tensor:
+    """
+    Compute corner-based geometric loss between two sets of homography parameters.
+
+    Args:
+        p (Tensor):      [N, 8, 1] predicted warp parameters
+        p_gt (Tensor):   [N, 8, 1] ground truth warp parameters
+        training_sz_pad (float): Side length of the padded image region
+
+    Returns:
+        loss (Tensor): Scalar loss (sum over batch)
+    """
+    device = p.device
+    batch_size = p.size(0)
+
+    # Convert to homography matrices
+    H_p = param_to_H(p)
+    H_gt = param_to_H(p_gt)
+
+    # Define 4 corners of square: [-pad/2, pad/2] range
+    corners = torch.tensor([
+        [-0.5,  0.5,  0.5, -0.5],  # x
+        [-0.5, -0.5,  0.5,  0.5],  # y
+        [ 1.0,  1.0,  1.0,  1.0]   # homogeneous
+    ], dtype=torch.float32, device=device) * training_sz_pad  # scale to training size
+
+    # Repeat for batch
+    corners = corners.unsqueeze(0).repeat(batch_size, 1, 1)  # [N, 3, 4]
+
+    # Warp corners with predicted and GT homographies
+    warped_p = H_p.bmm(corners)    # [N, 3, 4]
+    warped_gt = H_gt.bmm(corners)  # [N, 3, 4]
+
+    # Convert from homogeneous to 2D
+    warped_p = warped_p[:, :2, :] / warped_p[:, 2:3, :]
+    warped_gt = warped_gt[:, :2, :] / warped_gt[:, 2:3, :]
+
+    # Compute squared corner loss
+    loss = ((warped_p - warped_gt) ** 2).sum()
+
+    return loss
 
 class CornerLoss(nn.Module):
     """
