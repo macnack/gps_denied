@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+
 def grid_bilinear_sampling(A: torch.Tensor, x: torch.Tensor, y: torch.Tensor):
     """
     Bilinear sampling of A at (x, y) locations using grid_sample.
@@ -24,14 +25,18 @@ def grid_bilinear_sampling(A: torch.Tensor, x: torch.Tensor, y: torch.Tensor):
     grid = torch.stack((x_norm, y_norm), dim=-1)
 
     # Perform bilinear sampling
-    Q = F.grid_sample(A, grid, mode='bilinear', padding_mode='zeros', align_corners=True)
+    Q = F.grid_sample(
+        A, grid, mode="bilinear", padding_mode="zeros", align_corners=True
+    )
 
     # Compute in-view mask (inside [-1+ε, 1−ε])
     eps_w = 2 / W
     eps_h = 2 / H
     in_view_mask = (
-        (x_norm > -1 + eps_w) & (x_norm < 1 - eps_w) &
-        (y_norm > -1 + eps_h) & (y_norm < 1 - eps_h)
+        (x_norm > -1 + eps_w)
+        & (x_norm < 1 - eps_w)
+        & (y_norm > -1 + eps_h)
+        & (y_norm < 1 - eps_h)
     ).to(dtype=A.dtype)
 
     return Q, in_view_mask

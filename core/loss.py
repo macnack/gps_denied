@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
-from .geometry import param_to_H
+from .geometry import param_to_H, warp_perspective_norm
+import kornia
+import theseus as th
+from typing import Tuple
 
 def corner_loss(p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float) -> torch.Tensor:
     """
@@ -43,6 +46,45 @@ def corner_loss(p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float) -> 
     loss = ((warped_p - warped_gt) ** 2).sum()
 
     return loss
+
+# L1 distance between 4 corners of source image warped using GT homography
+# and estimated homography transform
+def four_corner_dist(H_1_2, H_1_2_gt, height, width):
+    Hinv_gt = torch.inverse(H_1_2_gt)
+    Hinv = torch.inverse(H_1_2)
+    grid = kornia.utils.create_meshgrid(2, 2, device=Hinv.device)
+    warped_grid = kornia.geometry.transform.homography_warper.warp_grid(grid, Hinv)
+    warped_grid_gt = kornia.geometry.transform.homography_warper.warp_grid(
+        grid, Hinv_gt
+    )
+    warped_grid = (warped_grid + 1) / 2
+    warped_grid_gt = (warped_grid_gt + 1) / 2
+    warped_grid[..., 0] *= width
+    warped_grid[..., 1] *= height
+    warped_grid_gt[..., 0] *= width
+    warped_grid_gt[..., 1] *= height
+    dist = torch.norm(warped_grid - warped_grid_gt, p=2, dim=-1)
+    dist = dist.mean(dim=-1).mean(dim=-1)
+    return dist
+
+# loss is difference between warped and target image
+def homography_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
+    H8_1_2 = optim_vars[0].tensor.reshape(-1, 8)
+    # Force the last element H[2,2] to be 1.
+    H_1_2 = torch.cat([H8_1_2, H8_1_2.new_ones(H8_1_2.shape[0], 1)], dim=-1)  # type: ignore
+    img1: th.Variable = aux_vars[0]
+    img2: th.Variable = aux_vars[-1]
+    img1_dst = warp_perspective_norm(H_1_2.reshape(-1, 3, 3), img1.tensor)
+    loss = torch.nn.functional.mse_loss(img1_dst, img2.tensor, reduction="none")
+    ones = warp_perspective_norm(
+        H_1_2.data.reshape(-1, 3, 3), torch.ones_like(img1.tensor)
+    )
+    mask = ones > 0.9
+    loss = loss.view(loss.shape[0], -1)
+    mask = mask.view(loss.shape[0], -1)
+    loss = (loss * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True)
+    return loss
+
 
 class CornerLoss(nn.Module):
     """

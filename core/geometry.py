@@ -1,5 +1,8 @@
 import torch
 from .sampling import grid_bilinear_sampling
+from theseus.third_party.utils import grid_sample
+import kornia
+
 
 def H_to_param(H: torch.Tensor) -> torch.Tensor:
     """
@@ -74,6 +77,7 @@ def meshgrid(x: torch.Tensor, y: torch.Tensor):
 
     return X, Y
 
+
 def warp_hmg(img: torch.Tensor, p: torch.Tensor):
     """
     Warp a batch of images using homography parameters.
@@ -92,14 +96,10 @@ def warp_hmg(img: torch.Tensor, p: torch.Tensor):
     x = torch.arange(W, device=device)
     y = torch.arange(H, device=device)
     X, Y = meshgrid(x, y)  # both [H, W]
-    
+
     # Homogeneous grid: [3, H*W]
     ones = torch.ones(1, X.numel(), device=device)
-    xy = torch.cat([
-        X.view(1, -1),
-        Y.view(1, -1),
-        ones
-    ], dim=0)  # [3, H*W]
+    xy = torch.cat([X.view(1, -1), Y.view(1, -1), ones], dim=0)  # [3, H*W]
 
     # Expand to batch: [N, 3, H*W]
     xy = xy.unsqueeze(0).repeat(batch_size, 1, 1)
@@ -123,3 +123,13 @@ def warp_hmg(img: torch.Tensor, p: torch.Tensor):
     return img_warp, mask
 
 
+def warp_perspective_norm(H, img):
+    height, width = img.shape[-2:]
+    grid = kornia.utils.create_meshgrid(
+        height, width, normalized_coordinates=True, device=H.device
+    )
+    Hinv = torch.inverse(H)
+    warped_grid = kornia.geometry.transform.homography_warper.warp_grid(grid, Hinv)
+    # Using custom implementation, above will throw error with outer loop optim.
+    img2 = grid_sample(img, warped_grid)
+    return img2

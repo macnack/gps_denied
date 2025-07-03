@@ -1,5 +1,6 @@
 import torch
 
+
 class InverseBatch(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
@@ -10,9 +11,10 @@ class InverseBatch(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        inv_input, = ctx.saved_tensors  # [N, h, h]
+        (inv_input,) = ctx.saved_tensors  # [N, h, h]
         grad_input = -inv_input.transpose(1, 2).bmm(grad_output).bmm(inv_input)
         return grad_input
+
 
 def InverseBatchFun(input: torch.Tensor) -> torch.Tensor:
     """
