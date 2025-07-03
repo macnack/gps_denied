@@ -30,3 +30,7 @@ checkpoints/
 # Large data
 *.pt
 *.pth
+*.whl
+sat_data/
+data/
+examples/
