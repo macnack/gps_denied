@@ -24,6 +24,7 @@ class ImageDataset(Dataset):
         param_ranges: dict,
         num_samples: int = 10_000,
         transform: transforms.Compose | None = None,
+        dict_output: bool = False,
     ):
         super().__init__()
         self.image_paths = glob.glob(str(Path(img_dir) / "*.png"))
@@ -33,7 +34,8 @@ class ImageDataset(Dataset):
         # sizes
         self.training_sz      = training_sz
         self.num_samples      = num_samples          # __len__
-
+        self.dict_output      = dict_output           # if True, return dict instead of tuple
+        
         # augment parameter ranges
         self.lower_sz         = param_ranges["lower_sz"]
         self.upper_sz         = param_ranges["upper_sz"]
@@ -61,13 +63,13 @@ class ImageDataset(Dataset):
         assert 0 <= idx < self.num_samples, "Index out of bounds"
         paths = random.sample(self.image_paths, 2)
         img_path = paths[0]
-        temp_path = paths[1]
+        temp_path = paths[0]
         
         # img      = Image.open(img_path)
         # template = Image.open(temp_path)
         img, template = random.sample(self.images, 2)
         img = img.copy()
-        template = template.copy()
+        template = img.copy()
 
         in_W, in_H = img.size
 
@@ -132,5 +134,11 @@ class ImageDataset(Dataset):
                                         pad_side : pad_side + self.training_sz]
         template_image = template_image[:, pad_side : pad_side + self.training_sz,
                                               pad_side : pad_side + self.training_sz]
-
+        if self.dict_output:
+            sample = {
+                "img1":   template_image,
+                "img2":   warped_image,
+                "H_1_2":  H,
+            }
+            return sample
         return warped_image, template_image, p_gt
