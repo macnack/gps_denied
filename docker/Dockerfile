@@ -49,7 +49,7 @@ RUN pip install --upgrade pip && \
         torchinfo \
         rich \
         kornia \
-        hydra-core --upgrade \
+        hydra-core --upgrade
 
 COPY ./theseus_ai-0.2.2-cp310-cp310-manylinux_2_17_x86_64.whl /tmp/
 RUN pip install /tmp/theseus_ai-0.2.2-cp310-cp310-manylinux_2_17_x86_64.whl
