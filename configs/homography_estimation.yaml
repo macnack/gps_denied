@@ -2,7 +2,7 @@ autograd_mode: vmap
 benchmarking_costs: false
 
 outer_optim:
-  num_epochs: 100
+  num_epochs: 300
   batch_size: 128
   lr: 1e-4
 
@@ -13,3 +13,23 @@ inner_optim:
 hydra:
   run:
     dir: examples/outputs/homography_estimation
+
+dataset:
+  name: aerial
+  path: /home/mackop/Github/gps-denied-uav-localization/sat_data/woodbridge/images
+  viz_every : 10
+  save_every: 100
+  num_workers: 4
+  imgH: 60
+  imgW: 80
+  num_samples: 1000
+
+parameter_ranges:
+  lower_sz: 80
+  upper_sz: 100
+  warp_pad: 0.4
+  min_scale: 1.00
+  max_scale: 1.00
+  angle_range: 15
+  projective_range: 0
+  translation_range: 10

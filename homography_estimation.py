@@ -29,7 +29,7 @@ from theseus.third_party.utils import grid_sample
 from datasets import HomographyDataset, prepare_data, ImageDataset
 from models import SimpleCNN
 from core import homography_error_fn, four_corner_dist, write_gif_batch
-
+import neptune
 if not sys.warnoptions:
     warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 def run(
+    log,
     batch_size: int = 2,
     num_epochs: int = 20,
     outer_lr: float = 1e-4,
@@ -48,7 +49,16 @@ def run(
     linear_solver_info: Optional[
         Tuple[Type[th.LinearSolver], Type[th.Linearization]]
     ] = None,
+    dataset_config: Dict[str, Any] = None,
+    parameter_ranges: Dict[str, Any] = None,
 ) -> List[List[Dict[str, Any]]]:
+    log["params/batch_size"] = batch_size
+    log["params/num_epochs"] = num_epochs
+    log["params/outer_lr"] = outer_lr
+    log["params/max_iterations"] = max_iterations
+    log["params/step_size"] = step_size
+    log["params/autograd_mode"] = autograd_mode
+    log["params/benchmarking_costs"] = benchmarking_costs
     logger.info(
         "==============================================================="
         "==========================="
@@ -60,40 +70,38 @@ def run(
         "---------------------------"
     )
     verbose = True
-    imgH, imgW = 60, 80
     use_gpu = True
-    viz_every = 2
-    save_every = 100
     use_cnn = True
-
+    imgH, imgW = dataset_config.get('imgH', 60), dataset_config.get('imgW', 80)
+    if dataset_config['name'] == 'aerial':
+        training_sz = np.max([imgH, imgW])
+        imgH, imgW = training_sz, training_sz
+    viz_every = dataset_config.get('viz_every', 10)
+    save_every = dataset_config.get('save_every', 100)
+    log["dataset/imgH"] = imgH
+    log["dataset/imgW"] = imgW
+    log["dataset/training_sz"] = training_sz
+    log["dataset/parameter_ranges"] = parameter_ranges
     log_dir = os.path.join(os.getcwd(), "viz")
     os.makedirs(log_dir, exist_ok=True)
 
     device = "cuda" if torch.cuda.is_available() and use_gpu else "cpu"
+    log["params/device"] = device
     print(f"Using device: {device}")
-    # dataset_paths = prepare_data()
-    # dataset = HomographyDataset(dataset_paths, imgH, imgW)
-    training_sz = 80
-    imgH, imgW = training_sz, training_sz
-    parameter_ranges ={
-            "lower_sz": 80,
-            "upper_sz": 80,
-            "warp_pad": 0.4,
-            "min_scale": 1.00,
-            "max_scale": 1.00,
-            "angle_range": 15,
-            "projective_range": 0,
-            "translation_range": 10,
-        }
-    dataset = ImageDataset(
-        img_dir="/home/maciek/workspace/sat_data/woodbridge/images",
-        training_sz=training_sz,
-        param_ranges=parameter_ranges,
-        num_samples=1000,
-        dict_output=True,
-    )
+    if dataset_config['name'] == 'aerial':
+        dataset = ImageDataset(
+            img_dir=dataset_config['path'],
+            training_sz=training_sz,
+            param_ranges=parameter_ranges,
+            num_samples=dataset_config.get('num_samples', 1000),
+            dict_output=True,
+        )
+    else:
+        dataset_paths = prepare_data()
+        dataset = HomographyDataset(dataset_paths, imgH, imgW)
+    
     dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=True, drop_last=True
+        dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
     )
 
     # A simple 2-layer CNN network that maintains the original image size.
@@ -234,9 +242,6 @@ def run(
             fc_dist = four_corner_dist(
                 H_1_2.reshape(-1, 3, 3), Hgt_1_2.reshape(-1, 3, 3), imgH, imgW
             )
-            err = fc_dist.mean().item()
-            
-            print(err)
             outer_loss = fc_dist.mean()
 
             start_event.record()
@@ -257,7 +262,11 @@ def run(
                 "Epoch %d, iteration %d, outer_loss: %.3f"
                 % (epoch, itr, outer_loss.item())
             )
-
+            log["metrics/outer_loss"].append(outer_loss.item())
+            log["metrics/forward_time_ms"].append(forward_time)
+            log["metrics/forward_memory_MB"].append(forward_mem)
+            log["metrics/backward_time_ms"].append(backward_time)
+            log["metrics/backward_memory_MB"].append(backward_mem)
             if itr % viz_every == 0:
                 write_gif_batch(log_dir, feat1, feat2, H_hist, Hgt_1_2, err_hist)
 
@@ -273,22 +282,32 @@ def run(
         )
         logger.info(f"Forward pass took {sum(forward_times)} ms/epoch.")
         logger.info(f"Forward pass took {sum(forward_mems)/len(forward_mems)} MBs.")
+        log["epoch/forward_time_total_ms"].append(sum(forward_times))
+        log["epoch/forward_memory_avg_MB"].append(sum(forward_mems)/len(forward_mems))
         # logger.info(f"benchmarking_costs: {benchmarking_costs}")
         if not benchmarking_costs:
             logger.info(f"Backward pass took {sum(backward_times)} ms/epoch.")
             logger.info(
                 f"Backward pass took {sum(backward_mems)/len(backward_mems)} MBs."
             )
+            log["epoch/backward_time_total_ms"].append(sum(backward_times))
+            log["epoch/backward_memory_avg_MB"].append(sum(backward_mems)/len(backward_mems))
         logger.info(
             "---------------------------------------------------------------"
             "---------------------------"
         )
+
     return benchmark_results
 
 
 @hydra.main(config_path="./configs/", config_name="homography_estimation")
 def main(cfg):
+    log = neptune.init_run(
+        project="maciej.krupka/gps-denied",
+        api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
+    )
     benchmark_results = run(
+        log,
         batch_size=cfg.outer_optim.batch_size,
         outer_lr=cfg.outer_optim.lr,
         num_epochs=cfg.outer_optim.num_epochs,
@@ -296,6 +315,8 @@ def main(cfg):
         step_size=cfg.inner_optim.step_size,
         autograd_mode=cfg.autograd_mode,
         benchmarking_costs=cfg.benchmarking_costs,
+        dataset_config=cfg.dataset,
+        parameter_ranges=cfg.parameter_ranges,
         linear_solver_info=cfg.get("linear_solver_info", None),
     )
     torch.save(benchmark_results, pathlib.Path(os.getcwd()) / "benchmark_results.pt")
@@ -303,4 +324,5 @@ def main(cfg):
 
 if __name__ == "__main__":
     torch.manual_seed(0)
+
     main()
