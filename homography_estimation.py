@@ -76,11 +76,11 @@ def run(
     if dataset_config['name'] == 'aerial':
         training_sz = np.max([imgH, imgW])
         imgH, imgW = training_sz, training_sz
+        log["dataset/training_sz"] = training_sz
     viz_every = dataset_config.get('viz_every', 10)
     save_every = dataset_config.get('save_every', 100)
     log["dataset/imgH"] = imgH
     log["dataset/imgW"] = imgW
-    log["dataset/training_sz"] = training_sz
     log["dataset/parameter_ranges"] = parameter_ranges
     log_dir = os.path.join(os.getcwd(), "viz")
     os.makedirs(log_dir, exist_ok=True)
