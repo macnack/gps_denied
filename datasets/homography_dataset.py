@@ -21,7 +21,7 @@ class HomographyDataset(Dataset):
             self.img_paths.extend(glob.glob(direc + "/**/*.jpg", recursive=True))
         assert len(self.img_paths) > 0, "no images found"
         logger.info("Found %d total images in dataset" % len(self.img_paths))
-        sc = 0.5
+        sc = 0.1
         self.rga = RandomGeoAug(
             rotate_param=GeoAugParam(min=-30 * sc, max=30 * sc),
             scale_param=GeoAugParam(min=(1.0 - 0.8 * sc), max=(1.0 + 1.2 * sc)),
