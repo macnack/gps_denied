@@ -1,0 +1,2 @@
+_target_: models.DeepCNN
+D: 64
