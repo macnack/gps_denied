@@ -110,7 +110,8 @@ def run(
     dataloader = DataLoader(
         dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
     )
-
+    log["model/name"] = model_cfg._target_.split(".")[-1]
+    log["model/channels"] = model_cfg.get("D", 1)
     cnn_model = hydra.utils.instantiate(model_cfg)
     cnn_model.to(device)
 
