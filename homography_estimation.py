@@ -27,9 +27,11 @@ from theseus.third_party.easyaug import GeoAugParam, RandomGeoAug, RandomPhotoAu
 from theseus.third_party.utils import grid_sample
 
 from datasets import HomographyDataset, prepare_data, ImageDataset
-from models import SimpleCNN
-from core import homography_error_fn, four_corner_dist, write_gif_batch
+from models import SimpleCNN, DeepCNN
+from core import homography_error_fn, four_corner_dist, write_gif_batch, compute_grad_norm
 import neptune
+from torch.utils.data import random_split
+
 if not sys.warnoptions:
     warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -39,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 def run(
     log,
+    model_cfg,
     batch_size: int = 2,
     num_epochs: int = 20,
     outer_lr: float = 1e-4,
@@ -82,9 +85,13 @@ def run(
     log["dataset/imgH"] = imgH
     log["dataset/imgW"] = imgW
     log["dataset/parameter_ranges"] = parameter_ranges
-    log_dir = os.path.join(os.getcwd(), "viz")
-    os.makedirs(log_dir, exist_ok=True)
-
+    viz_dir = os.path.join(os.getcwd(), "viz")
+    checkpoint_dir = os.path.join(os.getcwd(), "checkpoints")
+    os.makedirs(viz_dir, exist_ok=True)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    id_name = log["sys/id"].fetch()
+    viz_dir = os.path.join(viz_dir, id_name)
+    os.makedirs(viz_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() and use_gpu else "cpu"
     log["params/device"] = device
     print(f"Using device: {device}")
@@ -97,15 +104,14 @@ def run(
             dict_output=True,
         )
     else:
-        dataset_paths = prepare_data()
+        dataset_paths = ['/home/mkrupka/workspace/data/revisitop1m.1'] #prepare_data()
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
     
     dataloader = DataLoader(
         dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
     )
 
-    # A simple 2-layer CNN network that maintains the original image size.
-    cnn_model = SimpleCNN()
+    cnn_model = hydra.utils.instantiate(model_cfg)
     cnn_model.to(device)
 
     objective = th.Objective()
@@ -158,7 +164,9 @@ def run(
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
-
+    for name, param in cnn_model.named_parameters():
+        if param.requires_grad:
+            log[f"weights_hist/{name}"].append(0.0)
     logger.info(
         "---------------------------------------------------------------"
         "---------------------------"
@@ -171,6 +179,7 @@ def run(
         forward_mems: List[float] = []
         backward_times: List[float] = []
         backward_mems: List[float] = []
+        epoch_loss = 0.0
 
         for _, data in enumerate(dataloader):
             benchmark_results[-1].append({})
@@ -262,20 +271,36 @@ def run(
                 "Epoch %d, iteration %d, outer_loss: %.3f"
                 % (epoch, itr, outer_loss.item())
             )
+            inner_loss_min = err_hist[0].min().item()
+            inner_loss_max = err_hist[0].max().item()
+            inner_loss_last = err_hist[0][-1].item()
             log["metrics/outer_loss"].append(outer_loss.item())
+            log["metrics/inner_loss"].append(inner_loss_last)
+            log["metrics/inner_loss_min"].append(inner_loss_min)
+            log["metrics/inner_loss_max"].append(inner_loss_max)
+            log["metrics/inner_itr"].append(len(err_hist[0]) - 1)
+            log["metrics/outer_itr"] = itr
+            epoch_loss += float(outer_loss.item())
             log["metrics/forward_time_ms"].append(forward_time)
             log["metrics/forward_memory_MB"].append(forward_mem)
             log["metrics/backward_time_ms"].append(backward_time)
             log["metrics/backward_memory_MB"].append(backward_mem)
             if itr % viz_every == 0:
-                write_gif_batch(log_dir, feat1, feat2, H_hist, Hgt_1_2, err_hist)
+                viz_1 = torch.cat([feat1_tensor, img1], dim=2)
+                viz_2 = torch.cat([feat2_tensor, img2], dim=2)
+                write_gif_batch(viz_dir, viz_1, viz_2, H_hist, Hgt_1_2, err_hist, name=f"merges_homography_{itr}")
+                grad_norm = compute_grad_norm(cnn_model)
+                log["metrics/grad_norm"].append(grad_norm)
 
             if itr % save_every == 0:
-                save_path = os.path.join(log_dir, "last.ckpt")
+                filename = f"last_weights_{id_name}"
+                save_path = os.path.join(checkpoint_dir, f"{filename}.ckpt")
                 torch.save({"itr": itr, "cnn_model": cnn_model}, save_path)
 
             itr += 1
-
+        avg_epoch_loss = float(epoch_loss / len(dataloader))
+        log["epoch/epoch_loss"].log(avg_epoch_loss)
+        log["epoch/epoch"] = epoch
         logger.info(
             "--------------1-------------------------------------------------"
             "---------------------------"
@@ -296,7 +321,12 @@ def run(
             "---------------------------------------------------------------"
             "---------------------------"
         )
-
+        for name, param in cnn_model.named_parameters():
+            if param.requires_grad:
+                value = param.detach().cpu().numpy()
+                log[f"weights_hist/{name}"].append(value.mean())
+                log[f"weights_hist/{name}_std"].append(value.std())
+        
     return benchmark_results
 
 
@@ -308,6 +338,7 @@ def main(cfg):
     )
     benchmark_results = run(
         log,
+        model_cfg=cfg.model,
         batch_size=cfg.outer_optim.batch_size,
         outer_lr=cfg.outer_optim.lr,
         num_epochs=cfg.outer_optim.num_epochs,
@@ -319,7 +350,8 @@ def main(cfg):
         parameter_ranges=cfg.parameter_ranges,
         linear_solver_info=cfg.get("linear_solver_info", None),
     )
-    torch.save(benchmark_results, pathlib.Path(os.getcwd()) / "benchmark_results.pt")
+    id_name = log["sys/id"].fetch()
+    torch.save(benchmark_results, pathlib.Path(os.getcwd()) / f"benchmark_results_{id_name}.pt")
 
 
 if __name__ == "__main__":
