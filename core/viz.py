@@ -9,7 +9,7 @@ import shutil
 from torch import Tensor
 FONT = cv2.FONT_HERSHEY_DUPLEX
 FONT_SZ = 0.5
-FONT_PT = (5, 15)
+FONT_PT = (5, 25)
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +56,8 @@ def viz_warp(path, img1, img2, img1_w, iteration, err=-1.0, fc_err=-1.0):
 
 
 # write gif showing source image being warped onto target through optimisation
-def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist):
-    anim_dir = f"{log_dir}/animation"
+def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name="animation"):
+    anim_dir = f"{log_dir}/{name}"
     os.makedirs(anim_dir, exist_ok=True)
     subsample_anim = 1
     H8_1_2_hist = H_hist["H8_1_2"]
@@ -80,7 +80,7 @@ def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist):
         img1_dsts = warp_perspective_norm(H_1_2_mat, img1)
         path = os.path.join(anim_dir, f"{it:05d}.png")
         viz_warp(path, img1[0], img2[0], img1_dsts[0], it, err=err, fc_err=fc_err)
-    anim_path = os.path.join(log_dir, "animation.gif")
+    anim_path = os.path.join(log_dir, f"{name}.gif")
     cmd = f"convert -delay 10 -loop 0 {anim_dir}/*.png {anim_path}"
     logger.info("Generating gif here: %s" % anim_path)
     os.system(cmd)
