@@ -104,7 +104,10 @@ def run(
             dict_output=True,
         )
     else:
-        dataset_paths = ['/home/mkrupka/workspace/data/revisitop1m.1'] #prepare_data()
+        if dataset_config['path'] is None:
+            dataset_paths = prepare_data()
+        else:
+            dataset_paths = [dataset_config['path']]
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
     
     dataloader = DataLoader(
