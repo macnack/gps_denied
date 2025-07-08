@@ -95,6 +95,8 @@ def run(
     
     device = torch.device(f'cuda:{device_param}' if use_gpu else 'cpu')
     print(f"Using device: {device}")
+    log["dataset/name"] = dataset_config['name']
+    log["dataset/path"] = dataset_config['path']
     if dataset_config['name'] == 'aerial':
         dataset = ImageDataset(
             img_dir=dataset_config['path'],
@@ -109,12 +111,14 @@ def run(
         else:
             dataset_paths = [dataset_config['path']]
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
-    
+    log["dataset/num_samples"] = len(dataset)
     dataloader = DataLoader(
         dataset, batch_size=batch_size, shuffle=False, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
     )
     log["model/name"] = model_cfg._target_.split(".")[-1]
     log["model/channels"] = model_cfg.get("D", 1)
+    log["model/blur_type"] = model_cfg.get("blur_type", "none")
+
     cnn_model = hydra.utils.instantiate(model_cfg)
     cnn_model.to(device)
 
