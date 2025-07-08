@@ -69,7 +69,7 @@ class ImageDataset(Dataset):
         # template = Image.open(temp_path)
         img, template = random.sample(self.images, 2)
         img = img.copy()
-        template = img.copy()
+        template = template.copy()
 
         in_W, in_H = img.size
 
