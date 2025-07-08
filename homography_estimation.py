@@ -27,8 +27,8 @@ from theseus.third_party.easyaug import GeoAugParam, RandomGeoAug, RandomPhotoAu
 from theseus.third_party.utils import grid_sample
 
 from datasets import HomographyDataset, prepare_data, ImageDataset
-from models import SimpleCNN, DeepCNN
-from core import homography_error_fn, four_corner_dist, write_gif_batch, compute_grad_norm
+from models import SimpleCNN, DeepCNN, vgg16Conv
+from core import homography_error_fn, four_corner_dist, write_gif_batch, compute_grad_norm, normalize_img_batch
 import neptune
 from torch.utils.data import random_split
 
@@ -38,13 +38,13 @@ if not sys.warnoptions:
 # Logger
 logger = logging.getLogger(__name__)
 
-
 def run(
     log,
     model_cfg,
     batch_size: int = 2,
     num_epochs: int = 20,
     outer_lr: float = 1e-4,
+    device_param: int = 0,
     max_iterations: int = 50,
     step_size: float = 0.1,
     autograd_mode: str = "vmap",
@@ -92,15 +92,15 @@ def run(
     id_name = log["sys/id"].fetch()
     viz_dir = os.path.join(viz_dir, id_name)
     os.makedirs(viz_dir, exist_ok=True)
-    device = "cuda" if torch.cuda.is_available() and use_gpu else "cpu"
-    log["params/device"] = device
+    
+    device = torch.device(f'cuda:{device_param}' if use_gpu else 'cpu')
     print(f"Using device: {device}")
     if dataset_config['name'] == 'aerial':
         dataset = ImageDataset(
             img_dir=dataset_config['path'],
             training_sz=training_sz,
             param_ranges=parameter_ranges,
-            num_samples=dataset_config.get('num_samples', 1000),
+            num_samples=dataset_config.get('num_samples', 12800),
             dict_output=True,
         )
     else:
@@ -108,7 +108,7 @@ def run(
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
     
     dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
+        dataset, batch_size=batch_size, shuffle=False, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
     )
     log["model/name"] = model_cfg._target_.split(".")[-1]
     log["model/channels"] = model_cfg.get("D", 1)
@@ -188,11 +188,13 @@ def run(
 
             img1 = data["img1"].to(device)
             img2 = data["img2"].to(device)
+            img1_norm = normalize_img_batch(img1)
+            img2_norm = normalize_img_batch(img2)
             Hgt_1_2 = data["H_1_2"].to(device)
 
             if use_cnn:  # Use cnn features.
-                feat1_tensor = cnn_model.forward(img1)
-                feat2_tensor = cnn_model.forward(img2)
+                feat1_tensor = cnn_model.forward(img1_norm)
+                feat2_tensor = cnn_model.forward(img2_norm)
             else:  # Use image pixels.
                 feat1_tensor = img1
                 feat2_tensor = img2
@@ -287,9 +289,8 @@ def run(
             log["metrics/backward_time_ms"].append(backward_time)
             log["metrics/backward_memory_MB"].append(backward_mem)
             if itr % viz_every == 0:
-                viz_1 = torch.cat([feat1_tensor, img1], dim=2)
-                viz_2 = torch.cat([feat2_tensor, img2], dim=2)
-                write_gif_batch(viz_dir, viz_1, viz_2, H_hist, Hgt_1_2, err_hist, name=f"merges_homography_{itr}")
+                write_gif_batch(viz_dir, feat1_tensor, feat2_tensor, H_hist, Hgt_1_2, err_hist, name=f"feature_homography_{itr}")
+                write_gif_batch(viz_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name=f"img_homography_{itr}")
                 grad_norm = compute_grad_norm(cnn_model)
                 log["metrics/grad_norm"].append(grad_norm)
 
@@ -342,6 +343,7 @@ def main(cfg):
         model_cfg=cfg.model,
         batch_size=cfg.outer_optim.batch_size,
         outer_lr=cfg.outer_optim.lr,
+        device_param=cfg.outer_optim.device,
         num_epochs=cfg.outer_optim.num_epochs,
         max_iterations=cfg.inner_optim.max_iters,
         step_size=cfg.inner_optim.step_size,
