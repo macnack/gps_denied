@@ -1,3 +1,7 @@
+ARG USERNAME=maciek
+ARG USER_UID=1000
+ARG USER_GID=1000
+
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -54,9 +58,9 @@ RUN pip install --upgrade pip && \
 COPY ./theseus_ai-0.2.2-cp310-cp310-manylinux_2_17_x86_64.whl /tmp/
 RUN pip install /tmp/theseus_ai-0.2.2-cp310-cp310-manylinux_2_17_x86_64.whl
 
-ARG USERNAME=maciek
-ARG USER_UID=1000
-ARG USER_GID=1000
+ARG USERNAME
+ARG USER_UID
+ARG USER_GID
 
 RUN groupadd --gid $USER_GID $USERNAME && \
     useradd --uid $USER_UID --gid $USER_GID -m $USERNAME -s /bin/bash && \
