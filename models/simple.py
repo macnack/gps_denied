@@ -10,7 +10,6 @@ class SimpleCNN(nn.Module):
         self.conv2 = nn.Conv2d(D, 3, kernel_size=3, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(D)
         self.blur = self._get_blur_module(blur_type, 3)
-        print(f"Using {blur_type} blur with kernel size 3")
 
         def init_weights(m):
             if isinstance(m, nn.Conv2d):
