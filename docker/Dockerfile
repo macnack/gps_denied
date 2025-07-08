@@ -76,4 +76,4 @@ RUN echo ". $CONDA_DIR/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "alias l='ls -CF --color=auto'" >> ~/.bashrc && \
     echo "PS1='\[\e[1;32m\]\u@\h:\w \$\[\e[0m\] '" >> ~/.bashrc
 
-CMD [ "bash" ]
+CMD ["python3", "homography_estimation.py"]

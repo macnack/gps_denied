@@ -1,4 +1,4 @@
-docker run -it \
+docker run -d \
     --ipc=host \
     --gpus all \
     --env="XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" \
