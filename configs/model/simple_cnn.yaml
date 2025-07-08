@@ -1,2 +1,3 @@
 _target_: models.SimpleCNN
 D: 32
+blur_type: none
