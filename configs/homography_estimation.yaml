@@ -5,6 +5,7 @@ outer_optim:
   num_epochs: 2
   batch_size: 128
   lr: 1e-4
+  device: 0
 
 inner_optim:
   max_iters: 50
