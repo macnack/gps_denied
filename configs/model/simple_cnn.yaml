@@ -1,2 +1,2 @@
 _target_: models.SimpleCNN
-D: 64
+D: 32
