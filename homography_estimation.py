@@ -34,6 +34,8 @@ from core import (
     compute_grad_norm,
     normalize_img_batch,
 )
+from core.error_registry import get as get_spec
+
 import core
 import neptune
 from torch.utils.data import random_split
@@ -151,16 +153,18 @@ def run(
     objective = th.Objective()
 
     data = next(iter(dataloader))
-    H8_init = torch.eye(3).reshape(1, 9)[:, :-1].repeat(batch_size, 1)
+    
+    spec = get_spec(error_function)
+    init_tensor = spec.init_fn(batch_size, device)
+    Optim_var = th.Vector(tensor=init_tensor, name=spec.var_name)
     feats = torch.zeros_like(data["img1"])
-    H8_1_2 = th.Vector(tensor=H8_init, name="H8_1_2")
     feat1 = th.Variable(tensor=feats, name="feat1")
     feat2 = th.Variable(tensor=feats, name="feat2")
     # Set up inner loop optimization.
     homography_cf = th.AutoDiffCostFunction(
-        optim_vars=[H8_1_2],
+        optim_vars=[Optim_var],
         err_fn=cast(ErrFnType, error_fn),
-        dim=1,
+        dim=spec.dim,
         aux_vars=[feat1, feat2],
         autograd_mode=autograd_mode,
     )
@@ -169,11 +173,10 @@ def run(
     # Regularization helps avoid crash with using implicit mode.
     reg_w_value = 1e-2
     reg_w = th.ScaleCostWeight(np.sqrt(reg_w_value))
-    reg_w.to(dtype=H8_init.dtype)
-    vals = torch.tensor([[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]])
-    H8_1_2_id = th.Vector(tensor=vals, name="identity")
+    reg_w.to(dtype=init_tensor.dtype)
+    Optim_var_id = th.Vector(tensor=spec.id_vals, name="identity")
     reg_cf = th.Difference(
-        H8_1_2, target=H8_1_2_id, cost_weight=reg_w, name="reg_homography"
+        Optim_var, target=Optim_var_id, cost_weight=reg_w, name="reg_homography"
     )
     objective.add(reg_cf)
 
@@ -233,11 +236,10 @@ def run(
                 feat1_tensor = img1
                 feat2_tensor = img2
 
-            H8_init = torch.eye(3).reshape(1, 9)[:, :-1].repeat(batch_size, 1)
-            H8_init = H8_init.to(device)
+            init_tensor = spec.init_fn(batch_size, device)
 
             inputs: Dict[str, torch.Tensor] = {
-                "H8_1_2": H8_init,
+                spec.var_name: init_tensor,
                 "feat1": feat1_tensor,
                 "feat2": feat2_tensor,
             }
@@ -278,7 +280,7 @@ def run(
 
             Hgt_1_2 = Hgt_1_2.reshape(-1, 9)
             H8_1_2_tensor = theseus_layer.objective.get_optim_var(
-                "H8_1_2"
+                spec.var_name
             ).tensor.reshape(-1, 8)
             H_1_2 = torch.cat(
                 [H8_1_2_tensor, H8_1_2_tensor.new_ones(H8_1_2_tensor.shape[0], 1)],
@@ -315,7 +317,7 @@ def run(
             if itr % viz_every == 0:
                 write_gif_batch(viz_dir, feat1_tensor, feat2_tensor, H_hist, Hgt_1_2, err_hist, name=f"feature_homography_{itr}")
                 write_gif_batch(viz_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name=f"img_homography_{itr}")
-            if itr % (viz_every / 2) == 0:
+            if itr % (viz_every / 4) == 0:
                 grad_norm = compute_grad_norm(cnn_model)
                 grad_norms.append(grad_norm)
 
@@ -365,7 +367,7 @@ def run(
 
 @hydra.main(config_path="./configs/", config_name="homography_estimation")
 def main(cfg):
-    mode = "async"
+    mode = "offline"
     log = neptune.init_run(
         project="maciej.krupka/gps-denied",
         api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",

@@ -4,9 +4,12 @@ from .geometry import param_to_H, warp_perspective_norm, wrap_sRt_norm, param_to
 import kornia
 import theseus as th
 from typing import Tuple
+from core.error_registry import register
 
 
-def corner_loss(p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float) -> torch.Tensor:
+def corner_loss(
+    p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float
+) -> torch.Tensor:
     """
     Compute corner-based geometric loss between two sets of homography parameters.
 
@@ -26,17 +29,24 @@ def corner_loss(p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float) -> 
     H_gt = param_to_H(p_gt)
 
     # Define 4 corners of square: [-pad/2, pad/2] range
-    corners = torch.tensor([
-        [-0.5,  0.5,  0.5, -0.5],  # x
-        [-0.5, -0.5,  0.5,  0.5],  # y
-        [1.0,  1.0,  1.0,  1.0]   # homogeneous
-    ], dtype=torch.float32, device=device) * training_sz_pad  # scale to training size
+    corners = (
+        torch.tensor(
+            [
+                [-0.5, 0.5, 0.5, -0.5],  # x
+                [-0.5, -0.5, 0.5, 0.5],  # y
+                [1.0, 1.0, 1.0, 1.0],  # homogeneous
+            ],
+            dtype=torch.float32,
+            device=device,
+        )
+        * training_sz_pad
+    )  # scale to training size
 
     # Repeat for batch
     corners = corners.unsqueeze(0).repeat(batch_size, 1, 1)  # [N, 3, 4]
 
     # Warp corners with predicted and GT homographies
-    warped_p = H_p.bmm(corners)    # [N, 3, 4]
+    warped_p = H_p.bmm(corners)  # [N, 3, 4]
     warped_gt = H_gt.bmm(corners)  # [N, 3, 4]
 
     # Convert from homogeneous to 2D
@@ -48,16 +58,16 @@ def corner_loss(p: torch.Tensor, p_gt: torch.Tensor, training_sz_pad: float) -> 
 
     return loss
 
-# L1 distance between 4 corners of source image warped using GT homography
-# and estimated homography transform
-
 
 def four_corner_dist(H_1_2, H_1_2_gt, height, width):
+    """
+    # L1 distance between 4 corners of source image warped using GT homography
+    # and estimated homography transform
+    """
     Hinv_gt = torch.inverse(H_1_2_gt)
     Hinv = torch.inverse(H_1_2)
     grid = kornia.utils.create_meshgrid(2, 2, device=Hinv.device)
-    warped_grid = kornia.geometry.transform.homography_warper.warp_grid(
-        grid, Hinv)
+    warped_grid = kornia.geometry.transform.homography_warper.warp_grid(grid, Hinv)
     warped_grid_gt = kornia.geometry.transform.homography_warper.warp_grid(
         grid, Hinv_gt
     )
@@ -71,23 +81,32 @@ def four_corner_dist(H_1_2, H_1_2_gt, height, width):
     dist = dist.mean(dim=-1).mean(dim=-1)
     return dist
 
-# loss is difference between warped and target image
 
-
+@register(
+    var_name="H8_1_2",  # Theseus optim-var name
+    init_fn=lambda bs, dev: torch.tensor(
+        [[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]], device=dev, dtype=torch.float32
+    ).repeat(bs, 1),
+    id_vals=torch.tensor([[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]]),
+    dim=1,  # residual dimensionality
+)
 def homography_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
+    """
+    loss is difference between warped and target image
+    """
     H8_1_2 = optim_vars[0].tensor.reshape(-1, 8)
 
     # Force the last element H[2,2] to be 1.
-    H_1_2 = torch.cat([H8_1_2, H8_1_2.new_ones(
-        H8_1_2.shape[0], 1)], dim=-1)  # type: ignore
+    H_1_2 = torch.cat(
+        [H8_1_2, H8_1_2.new_ones(H8_1_2.shape[0], 1)], dim=-1
+    )  # type: ignore
 
     img1: th.Variable = aux_vars[0]
     img2: th.Variable = aux_vars[-1]
 
     img1_dst = warp_perspective_norm(H_1_2.reshape(-1, 3, 3), img1.tensor)
 
-    loss = torch.nn.functional.mse_loss(
-        img1_dst, img2.tensor, reduction="none")
+    loss = torch.nn.functional.mse_loss(img1_dst, img2.tensor, reduction="none")
 
     ones = warp_perspective_norm(
         H_1_2.data.reshape(-1, 3, 3), torch.ones_like(img1.tensor)
@@ -95,8 +114,7 @@ def homography_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Varia
     mask = ones > 0.9
     loss = loss.view(loss.shape[0], -1)
     mask = mask.view(loss.shape[0], -1)
-    loss = (loss * mask).sum(dim=1, keepdim=True) / \
-        mask.sum(dim=1, keepdim=True)
+    loss = (loss * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True)
     return loss
 
 
@@ -108,8 +126,7 @@ def sRt_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
     img2: th.Variable = aux_vars[-1]
     img1_dst = wrap_sRt_norm(A4_1, img1.tensor)
 
-    loss = torch.nn.functional.huber_loss(
-        img1_dst, img2.tensor, reduction="none")
+    loss = torch.nn.functional.huber_loss(img1_dst, img2.tensor, reduction="none")
 
     ones = wrap_sRt_norm(A4_1, torch.ones_like(img1.tensor))
 
@@ -118,8 +135,7 @@ def sRt_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
     loss = loss.view(loss.shape[0], -1)
     mask = mask.view(loss.shape[0], -1)
 
-    loss = (loss * mask).sum(dim=1, keepdim=True) / \
-        mask.sum(dim=1, keepdim=True)
+    loss = (loss * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True)
 
     return loss * 100.0
 
@@ -145,16 +161,17 @@ class CornerLoss(nn.Module):
 
         # Define 4 corners in normalized coordinates (±0.5 in x,y, homogeneous=1)
         # We register this as a buffer so it automatically lives on the correct device.
-        base_corners = torch.tensor([
-            [-0.5,  0.5,  0.5, -0.5],   # x
-            [-0.5, -0.5,  0.5,  0.5],   # y
-            [1.0,  1.0,  1.0,  1.0]    # homogeneous
-        ], dtype=torch.float32)  # shape: [3, 4]
-        self.register_buffer('base_corners', base_corners)
+        base_corners = torch.tensor(
+            [
+                [-0.5, 0.5, 0.5, -0.5],  # x
+                [-0.5, -0.5, 0.5, 0.5],  # y
+                [1.0, 1.0, 1.0, 1.0],  # homogeneous
+            ],
+            dtype=torch.float32,
+        )  # shape: [3, 4]
+        self.register_buffer("base_corners", base_corners)
 
-    def forward(self,
-                p: torch.Tensor,
-                p_gt: torch.Tensor) -> torch.Tensor:
+    def forward(self, p: torch.Tensor, p_gt: torch.Tensor) -> torch.Tensor:
         """
         Args:
             p (Tensor):      [N, 8, 1] predicted warp parameters
@@ -188,7 +205,7 @@ class CornerLoss(nn.Module):
 
         # Warp each batch’s corners through H_p and H_gt
         # warped_p, warped_gt both have shape [N, 3, 4]
-        warped_p = H_p .bmm(corners)   # each [3×3] × [3×4] → [3×4]
+        warped_p = H_p.bmm(corners)  # each [3×3] × [3×4] → [3×4]
         warped_gt = H_gt.bmm(corners)
 
         # Convert from homogeneous to 2D:  (x’/w’, y’/w’) for each corner
@@ -210,17 +227,23 @@ def compute_grad_norm(model):
         if p.grad is not None:
             param_norm = p.grad.data.norm(2)
             total_norm += param_norm.item() ** 2
-    return total_norm ** 0.5
+    return total_norm**0.5
+
 
 def matrix_loss(H_pred, H_gt):
-    return torch.nn.functional.l1_loss(H_pred / H_pred[:, 2:3, 2:3], H_gt / H_gt[:, 2:3, 2:3])
+    return torch.nn.functional.l1_loss(
+        H_pred / H_pred[:, 2:3, 2:3], H_gt / H_gt[:, 2:3, 2:3]
+    )
+
 
 def reprojection_loss(H_pred, H_gt, points):
     warped_pred = kornia.geometry.transform_points(H_pred, points)
     warped_gt = kornia.geometry.transform_points(H_gt, points)
     return torch.nn.functional.l1_loss(warped_pred, warped_gt)
 
+
 def photometric_loss(I_src, I_tgt, H_pred):
-    I_src_warped = kornia.geometry.transform.warp_perspective(I_src, H_pred, dsize=I_tgt.shape[-2:])
+    I_src_warped = kornia.geometry.transform.warp_perspective(
+        I_src, H_pred, dsize=I_tgt.shape[-2:]
+    )
     return torch.nn.functional.l1_loss(I_src_warped, I_tgt)
-  
