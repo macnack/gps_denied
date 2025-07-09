@@ -29,12 +29,12 @@ from theseus.third_party.utils import grid_sample
 from datasets import HomographyDataset, prepare_data, ImageDataset
 from models import SimpleCNN, DeepCNN, vgg16Conv
 from core import (
-    homography_error_fn,
     four_corner_dist,
     write_gif_batch,
     compute_grad_norm,
     normalize_img_batch,
 )
+import core
 import neptune
 from torch.utils.data import random_split
 
@@ -53,8 +53,7 @@ def run(
     num_epochs: int = 20,
     outer_lr: float = 1e-4,
     device_param: int = 0,
-    max_iterations: int = 50,
-    step_size: float = 0.1,
+    inner_config: Dict[str, Any] = None,
     autograd_mode: str = "vmap",
     benchmarking_costs: bool = False,
     linear_solver_info: Optional[
@@ -66,15 +65,18 @@ def run(
     verbose = True
     use_gpu = True
     use_cnn = True
+    error_function = inner_config.get("error_function", "homography_error_fn")
+    error_fn = getattr(core, error_function)
     log_params = {
         "batch_size": batch_size,
         "num_epochs": num_epochs,
         "outer_lr": outer_lr,
         "device_param": device_param,
-        "max_iterations": max_iterations,
-        "step_size": step_size,
+        "max_iterations": inner_config.get("max_iters", 50),
+        "step_size": inner_config.get("step_size", 0.1),
         "autograd_mode": autograd_mode,
         "benchmarking_costs": benchmarking_costs,
+        "error_function": error_function,
     }
     log["params"] = log_params
     logger.info(
@@ -154,11 +156,10 @@ def run(
     H8_1_2 = th.Vector(tensor=H8_init, name="H8_1_2")
     feat1 = th.Variable(tensor=feats, name="feat1")
     feat2 = th.Variable(tensor=feats, name="feat2")
-
     # Set up inner loop optimization.
     homography_cf = th.AutoDiffCostFunction(
         optim_vars=[H8_1_2],
-        err_fn=cast(ErrFnType, homography_error_fn),
+        err_fn=cast(ErrFnType, error_fn),
         dim=1,
         aux_vars=[feat1, feat2],
         autograd_mode=autograd_mode,
@@ -184,8 +185,8 @@ def run(
         objective,
         linear_solver_cls=linear_solver_cls,
         linearization_cls=linearization_cls,
-        max_iterations=max_iterations,
-        step_size=step_size,
+        max_iterations=inner_config.get("max_iters", 50),
+        step_size=inner_config.get("step_size", 0.1),
     )
     theseus_layer = th.TheseusLayer(inner_optim).to(device)
 
@@ -382,8 +383,7 @@ def main(cfg):
         outer_lr=cfg.outer_optim.lr,
         device_param=cfg.outer_optim.device,
         num_epochs=cfg.outer_optim.num_epochs,
-        max_iterations=cfg.inner_optim.max_iters,
-        step_size=cfg.inner_optim.step_size,
+        inner_config=cfg.inner_optim,
         autograd_mode=cfg.autograd_mode,
         benchmarking_costs=cfg.benchmarking_costs,
         dataset_config=cfg.dataset,
