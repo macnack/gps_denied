@@ -8,6 +8,7 @@ outer_optim:
   device: 0
 
 inner_optim:
+  error_function: homography_error_fn
   max_iters: 50
   step_size: 0.1
 
