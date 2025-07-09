@@ -48,11 +48,11 @@ def build_blur(blur_type: str, **kw) -> BaseFilter:
         return IdentityFilter()
 
     if blur_type == "blur":
-        return LearnableBlur(channels=kw.get("channels", 3), k_size=kw.get("k_size", 3))
+        return LearnableBlur(channels=kw.get("channels", 3), k_size=kw.get("k_size", 3), mode=kw.get("mode", "softmax"), eps=kw.get("eps", 1e-8))
 
     if blur_type == "box":
         return LearnableBoxBlur(
-            channels=kw.get("channels", 3), k_size=kw.get("k_size", 3)
+            channels=kw.get("channels", 3), k_size=kw.get("k_size", 3), eps=kw.get("eps", 1e-8)
         )
 
     if blur_type == "edge":

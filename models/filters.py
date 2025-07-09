@@ -23,13 +23,13 @@ class LearnableBlur(BaseFilter):
     Gaussian blur with learnable kernel that normalizes the kernel to stay on the probability simplex.
     """
 
-    def __init__(self, channels: int = 3, k_size: int = 3, mode: str = "softmax"):
+    def __init__(self, channels: int = 3, k_size: int = 3, mode: str = "softmax", eps: float = 1e-8):
         super().__init__()
         assert k_size % 2 == 1, "Kernel size must be odd."
         self.mode = mode
         self.channels = channels
         self.k_size = k_size
-        self.eps = 1e-8
+        self.eps = eps
 
         self.kernel = nn.Parameter(torch.randn(channels, 1, k_size, k_size))
 
@@ -50,12 +50,12 @@ class LearnableBoxBlur(BaseFilter):
     Learnable box blur that normalizes the kernel to stay on the probability simplex.
     """
 
-    def __init__(self, channels: int = 3, k_size: int = 3):
+    def __init__(self, channels: int = 3, k_size: int = 3, eps: float = 1e-8):
         super().__init__()
         assert k_size % 2 == 1, "Kernel size must be odd."
         self.channels = channels
         self.k_size = k_size
-        self.eps = 1e-8
+        self.eps = eps
 
         kernel = torch.ones(channels, 1, k_size, k_size) / (k_size * k_size)
         self.weight = nn.Parameter(kernel)
