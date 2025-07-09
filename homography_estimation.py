@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 def run(
     log,
+    id_name: str,
     model_cfg,
     batch_size: int = 2,
     num_epochs: int = 20,
@@ -98,7 +99,6 @@ def run(
     checkpoint_dir = os.path.join(os.getcwd(), "checkpoints")
     os.makedirs(viz_dir, exist_ok=True)
     os.makedirs(checkpoint_dir, exist_ok=True)
-    id_name = log["sys/id"].fetch()
     viz_dir = os.path.join(viz_dir, id_name)
     os.makedirs(viz_dir, exist_ok=True)
 
@@ -214,6 +214,7 @@ def run(
         forward_mems: List[float] = []
         backward_times: List[float] = []
         backward_mems: List[float] = []
+        grad_norms: List[float] = []
         epoch_loss = 0.0
 
         for _, data in enumerate(dataloader):
@@ -315,8 +316,9 @@ def run(
             if itr % viz_every == 0:
                 write_gif_batch(viz_dir, feat1_tensor, feat2_tensor, H_hist, Hgt_1_2, err_hist, name=f"feature_homography_{itr}")
                 write_gif_batch(viz_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name=f"img_homography_{itr}")
+            if itr % (viz_every / 2) == 0:
                 grad_norm = compute_grad_norm(cnn_model)
-                log["metrics/grad_norm"].append(grad_norm)
+                grad_norms.append(grad_norm)
 
             if itr % save_every == 0:
                 filename = f"last_weights_{id_name}"
@@ -330,6 +332,7 @@ def run(
             "--------------1-------------------------------------------------"
             "---------------------------"
         )
+        log["metrics/grad_norm"].extend(grad_norms)
         log["performance/forward_time_ms"].extend(forward_times)
         log["performance/forward_memory_MB"].extend(forward_mems)
         log["performance/backward_time_ms"].extend(backward_times)
@@ -367,8 +370,10 @@ def main(cfg):
         project="maciej.krupka/gps-denied",
         api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
     )
+    id_name = log["sys/id"].fetch()
     benchmark_results = run(
         log,
+        id_name=id_name,
         model_cfg=cfg.model,
         batch_size=cfg.outer_optim.batch_size,
         outer_lr=cfg.outer_optim.lr,
@@ -382,7 +387,6 @@ def main(cfg):
         parameter_ranges=cfg.parameter_ranges,
         linear_solver_info=cfg.get("linear_solver_info", None),
     )
-    id_name = log["sys/id"].fetch()
     torch.save(
         benchmark_results, pathlib.Path(os.getcwd()) / f"benchmark_results_{id_name}.pt"
     )
