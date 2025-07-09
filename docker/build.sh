@@ -35,14 +35,14 @@ docker build \
 # Generate run.sh
 cat <<EOF > run.sh
 #!/bin/bash
-docker run -it --rm \\
+docker run -d --rm \\
     --ipc=host \\
     --gpus all \\
     --env="XDG_RUNTIME_DIR=\$XDG_RUNTIME_DIR" \\
     --volume="\$(pwd)/..:/home/$USERNAME/workspace" \\
     --privileged \\
     --network=host \\
-    --name=gps_denied_proj \\
+    --name=gps_denied \\
     --user "$USER_UID:$USER_GID" \\
     homography_estimation "\$@"
 EOF
