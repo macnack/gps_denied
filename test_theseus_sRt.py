@@ -5,6 +5,7 @@ import numpy as np
 import theseus as th
 from theseus.core.cost_function import ErrFnType
 from core.loss import homography_error_fn, four_corner_dist, sRt_error_fn, param_to_A, wrap_sRt_norm
+from core.geometry import warp_perspective_norm
 from typing import Any, Dict, List, Optional, Tuple, Type, cast
 import os
 from core.viz import write_gif_batch
@@ -23,17 +24,15 @@ if __name__ == "__main__":
 
     img1 = crop(img, img.size[0] // 2, img.size[1] - 1000, 200, 200)
 
-    width, height = 200, 200
+    width, height = 100, 100
     img = img.resize((width, height))
-    # save cropped image
-    # img.save("tests/cropped_ukraine_post.jpg")
 
     # [scale, rotation, translation_x, translation_y]
-    A_true = torch.tensor([[1.0, 0.0, -10.0, -10.0]], dtype=torch.float32)
+    A_true = torch.tensor([[1.0, 0.4, -0.25, 0.30]], dtype=torch.float32)
     H_rot = kornia.geometry.convert_affinematrix_to_homography(
         param_to_A(A_true))
 
-    np_img = np.array(img)
+    np_img = np.array(img).astype(np.float32)
 
     tensor_img = kornia.utils.image_to_tensor(
         np_img, keepdim=False).float() / 255.0
@@ -44,18 +43,18 @@ if __name__ == "__main__":
     tensor_img = gaussian_blur(tensor_img)
     # tensor_img = kornia.filters.sobel(tensor_img, normalized=True)
 
-    wraped_img_tensor = kornia.geometry.transform.warp_perspective(
-        tensor_img,
+    wraped_img_tensor = warp_perspective_norm(
         H_rot,
-        dsize=(img.size[1], img.size[0])
-    )
+        tensor_img)
+
     wraped_img = wraped_img_tensor.squeeze(0)  # Remove batch dimension
     wraped_img = kornia.utils.tensor_to_image(wraped_img)
     wraped_img = Image.fromarray((wraped_img * 255).astype(np.uint8))
     # wraped_img.show()
 
     # H8_init = torch.eye(3).reshape(1, 9)[:, :-1].repeat(1, 1)
-    A4_init = torch.tensor([[1.0, -0.01, 0.0, 0.0]], dtype=torch.float32)
+    A4_init = torch.tensor([[1.0, 0.0, 0.0, 0.0]],
+                           dtype=torch.float32)
     objective = th.Objective()
     feats = torch.zeros_like(tensor_img)
     A4_1_2 = th.Vector(tensor=A4_init, name="A4_1_2")
@@ -72,18 +71,19 @@ if __name__ == "__main__":
     )
     objective.add(homography_cf)
 
-    reg_w_value = 1e-2
-    reg_w = th.ScaleCostWeight(np.sqrt(reg_w_value))
-    reg_w.to(dtype=A4_init.dtype)
-    vals = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
-    H8_1_2_id = th.Vector(tensor=vals, name="identity")
-    reg_cf = th.Difference(
-        A4_1_2, target=H8_1_2_id, cost_weight=reg_w, name="reg_homography"
-    )
-    objective.add(reg_cf)
+    # reg_w_value = 0.0
+    # reg_w = th.ScaleCostWeight(np.sqrt(reg_w_value))
+    # reg_w.to(dtype=A4_init.dtype)
+    # vals = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+    # H8_1_2_id = th.Vector(tensor=vals, name="identity")
+    # reg_cf = th.Difference(
+    #     A4_1_2, target=H8_1_2_id, cost_weight=reg_w, name="reg_homography"
+    # )
+    # objective.add(reg_cf)
+
     linear_solver_info = None
-    max_iterations = 200
-    step_size = 1e-2
+    max_iterations = 500
+    step_size = 6e-2
     verbose = True
     device = "cpu"
     if linear_solver_info is not None:
@@ -96,9 +96,11 @@ if __name__ == "__main__":
         linearization_cls=linearization_cls,
         max_iterations=max_iterations,
         step_size=step_size,
-        abs_err_tolerance=1e-14,
-        rel_err_tolerance=1e-14
+        abs_err_tolerance=1e-8,
+        rel_err_tolerance=1e-10
     )
+    # TODO test if it is better to stop earlier for better convergence of outer loop
+    # e.g higher rel_err_tolerance or lower max_iterations
 
     inputs: Dict[str, torch.Tensor] = {
         "A4_1_2": A4_init,
