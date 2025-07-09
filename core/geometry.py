@@ -129,7 +129,67 @@ def warp_perspective_norm(H, img):
         height, width, normalized_coordinates=True, device=H.device
     )
     Hinv = torch.inverse(H)
-    warped_grid = kornia.geometry.transform.homography_warper.warp_grid(grid, Hinv)
+    warped_grid = kornia.geometry.transform.homography_warper.warp_grid(
+        grid, Hinv)
     # Using custom implementation, above will throw error with outer loop optim.
     img2 = grid_sample(img, warped_grid)
     return img2
+
+
+def param_to_A(p: torch.Tensor) -> torch.Tensor:
+    """
+    Convert a batch of 4-parameter vectors to (2, 3) affine matrices.
+
+    Args:
+        p: Tensor of shape [N, 4] where
+           p[:, 0] = scale (shared for x & y)
+           p[:, 1] = rotation term
+           p[:, 2] = translation x
+           p[:, 3] = translation y
+    Returns:
+        Tensor [N, 2, 3] with rows
+        [[ s,  r,  tx ],
+         [ 0,  s,  ty ]]
+    """
+    s, r, tx, ty = p.unbind(dim=1)
+
+    center_x = 0.0  # FIXME: should be dynamic W/2
+    center_y = 0.0  # FIXME: should be dynamic H/2
+    r_scaled = r * (torch.pi / 180.0)  # Convert degrees to radians
+    cos_r = torch.cos(r_scaled)
+    sin_r = torch.sin(r_scaled)
+
+    sf = torch.ones_like(s)
+
+    a = sf * cos_r
+    b = -sf * sin_r
+    c = sf * sin_r
+    d = sf * cos_r
+
+    # The translation part is modified to perform rotation around the center
+    # t_final = t + C - sR*C
+    tx_final = tx + center_x - (a * center_x + b * center_y)
+    ty_final = ty + center_y - (c * center_x + d * center_y)
+
+    return torch.stack(
+        (
+            a, b, tx_final,
+            c, d, ty_final
+        ),
+        dim=-1
+    ).view(-1, 2, 3)
+
+
+def wrap_sRt_norm(A, img):
+    """
+    Wrap an image using a 3x4 matrix A (sRt) with normalized coordinates.
+    Args:
+        A: [N, 4] matrix [scale, rotation, dx, dy]
+        img: [N, C, H, W] image batch
+    Returns:
+        img2: warped image
+    """
+
+    H = kornia.geometry.convert_affinematrix_to_homography(param_to_A(A))
+
+    return warp_perspective_norm(H, img)
