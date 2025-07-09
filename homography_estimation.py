@@ -223,13 +223,11 @@ def run(
 
             img1 = data["img1"].to(device)
             img2 = data["img2"].to(device)
-            img1_norm = normalize_img_batch(img1)
-            img2_norm = normalize_img_batch(img2)
             Hgt_1_2 = data["H_1_2"].to(device)
 
             if use_cnn:  # Use cnn features.
-                feat1_tensor = cnn_model.forward(img1_norm)
-                feat2_tensor = cnn_model.forward(img2_norm)
+                feat1_tensor = cnn_model.forward(img1)
+                feat2_tensor = cnn_model.forward(img2)
             else:  # Use image pixels.
                 feat1_tensor = img1
                 feat2_tensor = img2
@@ -366,11 +364,16 @@ def run(
 
 @hydra.main(config_path="./configs/", config_name="homography_estimation")
 def main(cfg):
+    mode = "async"
     log = neptune.init_run(
         project="maciej.krupka/gps-denied",
         api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
+        mode=mode,
     )
-    id_name = log["sys/id"].fetch()
+    if mode == "offline":
+        id_name = mode
+    else:
+        id_name = log["sys/id"].fetch()
     benchmark_results = run(
         log,
         id_name=id_name,
