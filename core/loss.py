@@ -211,3 +211,16 @@ def compute_grad_norm(model):
             param_norm = p.grad.data.norm(2)
             total_norm += param_norm.item() ** 2
     return total_norm ** 0.5
+
+def matrix_loss(H_pred, H_gt):
+    return torch.nn.functional.l1_loss(H_pred / H_pred[:, 2:3, 2:3], H_gt / H_gt[:, 2:3, 2:3])
+
+def reprojection_loss(H_pred, H_gt, points):
+    warped_pred = kornia.geometry.transform_points(H_pred, points)
+    warped_gt = kornia.geometry.transform_points(H_gt, points)
+    return torch.nn.functional.l1_loss(warped_pred, warped_gt)
+
+def photometric_loss(I_src, I_tgt, H_pred):
+    I_src_warped = kornia.geometry.transform.warp_perspective(I_src, H_pred, dsize=I_tgt.shape[-2:])
+    return torch.nn.functional.l1_loss(I_src_warped, I_tgt)
+  

@@ -1,2 +1,5 @@
 _target_: models.SimpleCNN
-D: 64
+D: 32
+blur_type: none
+use_skip: true
+eps: 1e-4

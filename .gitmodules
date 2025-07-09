@@ -1,0 +1,3 @@
+[submodule "third_party/theseus"]
+	path = third_party/theseus
+	url = https://github.com/facebookresearch/theseus.git
