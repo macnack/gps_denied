@@ -28,7 +28,13 @@ from theseus.third_party.utils import grid_sample
 
 from datasets import HomographyDataset, prepare_data, ImageDataset
 from models import SimpleCNN, DeepCNN, vgg16Conv
-from core import homography_error_fn, four_corner_dist, write_gif_batch, compute_grad_norm, normalize_img_batch
+from core import (
+    homography_error_fn,
+    four_corner_dist,
+    write_gif_batch,
+    compute_grad_norm,
+    normalize_img_batch,
+)
 import neptune
 from torch.utils.data import random_split
 
@@ -37,6 +43,7 @@ if not sys.warnoptions:
 
 # Logger
 logger = logging.getLogger(__name__)
+
 
 def run(
     log,
@@ -55,13 +62,20 @@ def run(
     dataset_config: Dict[str, Any] = None,
     parameter_ranges: Dict[str, Any] = None,
 ) -> List[List[Dict[str, Any]]]:
-    log["params/batch_size"] = batch_size
-    log["params/num_epochs"] = num_epochs
-    log["params/outer_lr"] = outer_lr
-    log["params/max_iterations"] = max_iterations
-    log["params/step_size"] = step_size
-    log["params/autograd_mode"] = autograd_mode
-    log["params/benchmarking_costs"] = benchmarking_costs
+    verbose = True
+    use_gpu = True
+    use_cnn = True
+    log_params = {
+        "batch_size": batch_size,
+        "num_epochs": num_epochs,
+        "outer_lr": outer_lr,
+        "device_param": device_param,
+        "max_iterations": max_iterations,
+        "step_size": step_size,
+        "autograd_mode": autograd_mode,
+        "benchmarking_costs": benchmarking_costs,
+    }
+    log["params"] = log_params
     logger.info(
         "==============================================================="
         "==========================="
@@ -72,19 +86,14 @@ def run(
         "---------------------------------------------------------------"
         "---------------------------"
     )
-    verbose = True
-    use_gpu = True
-    use_cnn = True
-    imgH, imgW = dataset_config.get('imgH', 60), dataset_config.get('imgW', 80)
-    if dataset_config['name'] == 'aerial':
+    training_sz = -1
+    imgH, imgW = dataset_config.get("imgH", 60), dataset_config.get("imgW", 80)
+    if dataset_config["name"] == "aerial":
         training_sz = np.max([imgH, imgW])
         imgH, imgW = training_sz, training_sz
-        log["dataset/training_sz"] = training_sz
-    viz_every = dataset_config.get('viz_every', 10)
-    save_every = dataset_config.get('save_every', 100)
-    log["dataset/imgH"] = imgH
-    log["dataset/imgW"] = imgW
-    log["dataset/parameter_ranges"] = parameter_ranges
+    viz_every = dataset_config.get("viz_every", 10)
+    save_every = dataset_config.get("save_every", 100)
+
     viz_dir = os.path.join(os.getcwd(), "viz")
     checkpoint_dir = os.path.join(os.getcwd(), "checkpoints")
     os.makedirs(viz_dir, exist_ok=True)
@@ -92,32 +101,47 @@ def run(
     id_name = log["sys/id"].fetch()
     viz_dir = os.path.join(viz_dir, id_name)
     os.makedirs(viz_dir, exist_ok=True)
-    
-    device = torch.device(f'cuda:{device_param}' if use_gpu else 'cpu')
+
+    device = torch.device(f"cuda:{device_param}" if use_gpu else "cpu")
     print(f"Using device: {device}")
-    log["dataset/name"] = dataset_config['name']
-    log["dataset/path"] = dataset_config['path']
-    if dataset_config['name'] == 'aerial':
+
+    if dataset_config["name"] == "aerial":
         dataset = ImageDataset(
-            img_dir=dataset_config['path'],
+            img_dir=dataset_config["path"],
             training_sz=training_sz,
             param_ranges=parameter_ranges,
-            num_samples=dataset_config.get('num_samples', 12800),
+            num_samples=dataset_config.get("num_samples", 12800),
             dict_output=True,
         )
     else:
-        if dataset_config['path'] is None:
+        if dataset_config["path"] is None:
             dataset_paths = prepare_data()
         else:
-            dataset_paths = [dataset_config['path']]
+            dataset_paths = [dataset_config["path"]]
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
-    log["dataset/num_samples"] = len(dataset)
+    dataset_log = {
+        "imgH": imgH,
+        "imgW": imgW,
+        "training_sz": training_sz,
+        "parameter_ranges": parameter_ranges,
+        "name": dataset_config["name"],
+        "path": dataset_config["path"],
+        "num_samples": len(dataset),
+    }
+    log["dataset"] = dataset_log
     dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, drop_last=True, num_workers=dataset_config.get('num_workers', 1)
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        drop_last=True,
+        num_workers=dataset_config.get("num_workers", 1),
     )
-    log["model/name"] = model_cfg._target_.split(".")[-1]
-    log["model/channels"] = model_cfg.get("D", 1)
-    log["model/blur_type"] = model_cfg.get("blur_type", "none")
+    model_log = {
+        "name": model_cfg._target_.split(".")[-1],
+        "channels": model_cfg.get("D", 1),
+        "blur_type": model_cfg.get("blur_type", "none"),
+    }
+    log["model"] = model_log
 
     cnn_model = hydra.utils.instantiate(model_cfg)
     cnn_model.to(device)
@@ -174,11 +198,14 @@ def run(
     end_event = torch.cuda.Event(enable_timing=True)
     for name, param in cnn_model.named_parameters():
         if param.requires_grad:
-            log[f"weights_hist/{name}"].append(0.0)
+            value = 0.0
+            log[f"weights_hist/{name}"].append(value)
+            log[f"weights_hist/{name}_std"].append(value)
     logger.info(
         "---------------------------------------------------------------"
         "---------------------------"
     )
+    cnn_model.train()
     # benchmark_results[i][j] has the results (time/mem) for epoch i and batch j
     benchmark_results: List[List[Dict[str, Any]]] = []
     for epoch in range(num_epochs):
@@ -281,20 +308,10 @@ def run(
                 "Epoch %d, iteration %d, outer_loss: %.3f"
                 % (epoch, itr, outer_loss.item())
             )
-            inner_loss_min = err_hist[0].min().item()
-            inner_loss_max = err_hist[0].max().item()
             inner_loss_last = err_hist[0][-1].item()
             log["metrics/outer_loss"].append(outer_loss.item())
             log["metrics/inner_loss"].append(inner_loss_last)
-            log["metrics/inner_loss_min"].append(inner_loss_min)
-            log["metrics/inner_loss_max"].append(inner_loss_max)
-            log["metrics/inner_itr"].append(len(err_hist[0]) - 1)
-            log["metrics/outer_itr"] = itr
             epoch_loss += float(outer_loss.item())
-            log["metrics/forward_time_ms"].append(forward_time)
-            log["metrics/forward_memory_MB"].append(forward_mem)
-            log["metrics/backward_time_ms"].append(backward_time)
-            log["metrics/backward_memory_MB"].append(backward_mem)
             if itr % viz_every == 0:
                 write_gif_batch(viz_dir, feat1_tensor, feat2_tensor, H_hist, Hgt_1_2, err_hist, name=f"feature_homography_{itr}")
                 write_gif_batch(viz_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name=f"img_homography_{itr}")
@@ -309,23 +326,28 @@ def run(
             itr += 1
         avg_epoch_loss = float(epoch_loss / len(dataloader))
         log["epoch/epoch_loss"].log(avg_epoch_loss)
-        log["epoch/epoch"] = epoch
         logger.info(
             "--------------1-------------------------------------------------"
             "---------------------------"
         )
+        log["performance/forward_time_ms"].extend(forward_times)
+        log["performance/forward_memory_MB"].extend(forward_mems)
+        log["performance/backward_time_ms"].extend(backward_times)
+        log["performance/backward_memory_MB"].extend(backward_mems)
         logger.info(f"Forward pass took {sum(forward_times)} ms/epoch.")
         logger.info(f"Forward pass took {sum(forward_mems)/len(forward_mems)} MBs.")
-        log["epoch/forward_time_total_ms"].append(sum(forward_times))
-        log["epoch/forward_memory_avg_MB"].append(sum(forward_mems)/len(forward_mems))
+        log["performance/forward_time_total_ms"].append(sum(forward_times))
+        log["performance/forward_memory_avg_MB"].append(sum(forward_mems) / len(forward_mems))
         # logger.info(f"benchmarking_costs: {benchmarking_costs}")
         if not benchmarking_costs:
             logger.info(f"Backward pass took {sum(backward_times)} ms/epoch.")
             logger.info(
                 f"Backward pass took {sum(backward_mems)/len(backward_mems)} MBs."
             )
-            log["epoch/backward_time_total_ms"].append(sum(backward_times))
-            log["epoch/backward_memory_avg_MB"].append(sum(backward_mems)/len(backward_mems))
+            log["performance/backward_time_total_ms"].append(sum(backward_times))
+            log["performance/backward_memory_avg_MB"].append(
+                sum(backward_mems) / len(backward_mems)
+            )
         logger.info(
             "---------------------------------------------------------------"
             "---------------------------"
@@ -335,7 +357,7 @@ def run(
                 value = param.detach().cpu().numpy()
                 log[f"weights_hist/{name}"].append(value.mean())
                 log[f"weights_hist/{name}_std"].append(value.std())
-        
+
     return benchmark_results
 
 
@@ -361,7 +383,10 @@ def main(cfg):
         linear_solver_info=cfg.get("linear_solver_info", None),
     )
     id_name = log["sys/id"].fetch()
-    torch.save(benchmark_results, pathlib.Path(os.getcwd()) / f"benchmark_results_{id_name}.pt")
+    torch.save(
+        benchmark_results, pathlib.Path(os.getcwd()) / f"benchmark_results_{id_name}.pt"
+    )
+    log.stop()
 
 
 if __name__ == "__main__":
