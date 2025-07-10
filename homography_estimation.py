@@ -120,6 +120,7 @@ def run(
     else:
         if dataset_config["path"] is None:
             dataset_paths = prepare_data()
+            dataset_config["path"] = dataset_paths[0]
         else:
             dataset_paths = [dataset_config["path"]]
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
@@ -364,7 +365,7 @@ def run(
 
 @hydra.main(config_path="./configs/", config_name="homography_estimation")
 def main(cfg):
-    mode = "offline"
+    mode = cfg.get("mode", "offline")
     log = neptune.init_run(
         project="maciej.krupka/gps-denied",
         api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
