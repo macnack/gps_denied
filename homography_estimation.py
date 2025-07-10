@@ -281,11 +281,8 @@ def run(
             Hgt_1_2 = Hgt_1_2.reshape(-1, 9)
             H8_1_2_tensor = theseus_layer.objective.get_optim_var(
                 spec.var_name
-            ).tensor.reshape(-1, 8)
-            H_1_2 = torch.cat(
-                [H8_1_2_tensor, H8_1_2_tensor.new_ones(H8_1_2_tensor.shape[0], 1)],
-                dim=-1,
-            )
+            ).tensor.reshape(spec.reshape)
+            H_1_2 = spec.get_homography(H8_1_2_tensor)
             # Loss is on four corner error.
             fc_dist = four_corner_dist(
                 H_1_2.reshape(-1, 3, 3), Hgt_1_2.reshape(-1, 3, 3), imgH, imgW
@@ -315,8 +312,8 @@ def run(
             log["metrics/inner_loss"].append(inner_loss_last)
             epoch_loss += float(outer_loss.item())
             if itr % viz_every == 0:
-                write_gif_batch(viz_dir, feat1_tensor, feat2_tensor, H_hist, Hgt_1_2, err_hist, name=f"feature_homography_{itr}")
-                write_gif_batch(viz_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name=f"img_homography_{itr}")
+                write_gif_batch(viz_dir, feat1_tensor, feat2_tensor, H_hist[spec.var_name], Hgt_1_2, err_hist, name=f"feature_homography_{itr}", func=spec.get_homography)
+                write_gif_batch(viz_dir, img1, img2, H_hist[spec.var_name], Hgt_1_2, err_hist, name=f"img_homography_{itr}",  func=spec.get_homography)
             if itr % (viz_every / 4) == 0:
                 grad_norm = compute_grad_norm(cnn_model)
                 grad_norms.append(grad_norm)

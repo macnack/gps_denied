@@ -8,6 +8,8 @@ from core.loss import homography_error_fn, four_corner_dist
 from typing import Any, Dict, List, Optional, Tuple, Type, cast
 import os
 from core.viz import write_gif_batch
+from core.error_registry import get as get_spec
+
 img_dir = "tests/img_t.png"
 
 
@@ -15,7 +17,7 @@ if __name__ == "__main__":
     img = Image.open(img_dir).convert("RGB")
     width, height = 100, 100
     img = img.resize((width, height))
-     
+    spec = get_spec("homography_error_fn")     
     H_rot = [[0, -1, img.size[0]], [1, 0, 0], [0, 0, 1]]
 
     center = torch.tensor([[width / 2.0, height / 2.0]])
@@ -42,10 +44,10 @@ if __name__ == "__main__":
     wraped_img = Image.fromarray((wraped_img * 255).astype(np.uint8))
     # img.show()
     # wraped_img.show()
-    H8_init = torch.eye(3).reshape(1, 9)[:, :-1].repeat(1, 1)
+    H8_init = spec.init_fn(1, torch.device("cpu"))
     objective = th.Objective()
     feats = torch.zeros_like(tensor_img)
-    H8_1_2 = th.Vector(tensor=H8_init, name="H8_1_2")
+    H8_1_2 = th.Vector(tensor=H8_init, name=spec.var_name)
     feat1 = th.Variable(tensor=feats, name="feat1")
     feat2 = th.Variable(tensor=feats, name="feat2")
     
@@ -53,7 +55,7 @@ if __name__ == "__main__":
     homography_cf = th.AutoDiffCostFunction(
         optim_vars=[H8_1_2],
         err_fn=cast(ErrFnType, homography_error_fn),
-        dim=1,
+        dim=spec.dim,
         aux_vars=[feat1, feat2],
         autograd_mode=autograd_mode,
     )
@@ -62,7 +64,7 @@ if __name__ == "__main__":
     reg_w_value = 1e-2
     reg_w = th.ScaleCostWeight(np.sqrt(reg_w_value))
     reg_w.to(dtype=H8_init.dtype)
-    vals = torch.tensor([[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]])
+    vals = spec.id_vals
     H8_1_2_id = th.Vector(tensor=vals, name="identity")
     reg_cf = th.Difference(
         H8_1_2, target=H8_1_2_id, cost_weight=reg_w, name="reg_homography"
@@ -86,7 +88,7 @@ if __name__ == "__main__":
     )
     
     inputs: Dict[str, torch.Tensor] = {
-                "H8_1_2": H8_init,
+                spec.var_name : H8_init,
                 "feat1": tensor_img,
                 "feat2": wraped_img_tensor,
             }
@@ -102,12 +104,9 @@ if __name__ == "__main__":
                 )
     
     H8_1_2_tensor = theseus_layer.objective.get_optim_var(
-                "H8_1_2"
-            ).tensor.reshape(-1, 8)
-    H_1_2 = torch.cat(
-                [H8_1_2_tensor, H8_1_2_tensor.new_ones(H8_1_2_tensor.shape[0], 1)],
-                dim=-1,
-            )
+                spec.var_name
+            ).tensor.reshape(spec.reshape)
+    H_1_2 = spec.get_homography(H8_1_2_tensor)
     fc_dist = four_corner_dist(
                 H_1_2.reshape(-1, 3, 3), H_rot.reshape(-1, 3, 3), img.size[1], img.size[0]
             )
@@ -121,7 +120,7 @@ if __name__ == "__main__":
     print(f"Final 4-corner distance: {fc_dist.item()}")
     print(f"Final Homography: {H_1_2}")
     print(f"Final Homography (H8): {H_rot}")
-    write_gif_batch(log_dir, feat1, feat2, H_hist, H_rot, err_hist)
+    write_gif_batch(log_dir, feat1, feat2, H_hist[spec.var_name], H_rot, err_hist, func=spec.get_homography)
     print(f"GIF saved to {log_dir}/animation.gif")
 
     print(err_hist[0][-1].item())

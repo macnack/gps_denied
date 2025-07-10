@@ -54,22 +54,24 @@ def viz_warp(path, img1, img2, img1_w, iteration, err=-1.0, fc_err=-1.0):
     )
     cv2.imwrite(path, out)
 
+def get_homography(tensor):
+    raise ValueError(
+        "You must pass a 'func' argument that translates the homography tensor (e.g., func = your_tensor_converter_function)"
+    )
 
 # write gif showing source image being warped onto target through optimisation
-def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name="animation"):
+def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name="animation", func=get_homography):
     anim_dir = f"{log_dir}/{name}"
     os.makedirs(anim_dir, exist_ok=True)
     subsample_anim = 1
-    H8_1_2_hist = H_hist["H8_1_2"]
+    H8_1_2_hist = H_hist
     num_iters = (~err_hist[0].isinf()).sum().item()
     for it in range(num_iters):
         if it % subsample_anim != 0:
             continue
         # Visualize only first element in batch.
         H8_1_2 = H8_1_2_hist[..., it]
-        H_1_2 = cat([H8_1_2, H8_1_2.new_ones(H8_1_2.shape[0], 1)], dim=-1).to(
-            Hgt_1_2.device
-        )
+        H_1_2 = func(H8_1_2).to(Hgt_1_2.device)
         H_1_2_mat = H_1_2[0].reshape(1, 3, 3)
         Hgt_1_2_mat = Hgt_1_2[0].reshape(1, 3, 3)
         imgH, imgW = img1.shape[-2], img1.shape[-1]

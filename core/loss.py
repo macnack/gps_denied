@@ -89,6 +89,8 @@ def four_corner_dist(H_1_2, H_1_2_gt, height, width):
     ).repeat(bs, 1),
     id_vals=torch.tensor([[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]]),
     dim=1,  # residual dimensionality
+    reshape=(-1, 8),
+    get_homography=lambda t: torch.cat([t, t.new_ones(t.shape[0], 1)], dim=-1),
 )
 def homography_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
     """
@@ -118,6 +120,18 @@ def homography_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Varia
     return loss
 
 
+@register(
+    var_name="A4_1_2",
+    init_fn=lambda bs, dev: torch.tensor(
+        [[1.0, 0.00, 0.0, 0.0]], device=dev, dtype=torch.float32
+    ).repeat(bs, 1),
+    id_vals=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+    dim=1,
+    reshape=(-1, 4),
+    get_homography=lambda t: kornia.geometry.convert_affinematrix_to_homography(
+        param_to_A(t)
+    ),
+)
 def sRt_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
 
     A4_1 = optim_vars[0].tensor.reshape(-1, 4)
