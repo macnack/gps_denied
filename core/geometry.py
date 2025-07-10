@@ -136,7 +136,7 @@ def warp_perspective_norm(H, img):
     return img2
 
 
-def param_to_A(p: torch.Tensor) -> torch.Tensor:
+def param_to_A(p: torch.Tensor, center_x: float = 0.5, center_y: float = 0.5) -> torch.Tensor:
     """
     Convert a batch of 4-parameter vectors to (2, 3) affine matrices.
 
@@ -144,8 +144,8 @@ def param_to_A(p: torch.Tensor) -> torch.Tensor:
         p: Tensor of shape [N, 4] where
            p[:, 0] = scale (shared for x & y)
            p[:, 1] = rotation term
-           p[:, 2] = translation x
-           p[:, 3] = translation y
+           p[:, 2] = translation x [ e.g 0.2 for 20% of width ]
+           p[:, 3] = translation y [ e.g 0.2 for 20% of height ]
     Returns:
         Tensor [N, 2, 3] with rows
         [[ s,  r,  tx ],
@@ -153,9 +153,10 @@ def param_to_A(p: torch.Tensor) -> torch.Tensor:
     """
     s, r, tx, ty = p.unbind(dim=1)
 
-    center_x = 0.0  # FIXME: should be dynamic W/2
-    center_y = 0.0  # FIXME: should be dynamic H/2
-    r_scaled = r * (torch.pi / 180.0)  # Convert degrees to radians
+    tx_scaled = tx * 1.0
+    ty_scaled = ty * 1.0
+
+    r_scaled = r * 1.0
     cos_r = torch.cos(r_scaled)
     sin_r = torch.sin(r_scaled)
 
@@ -168,8 +169,8 @@ def param_to_A(p: torch.Tensor) -> torch.Tensor:
 
     # The translation part is modified to perform rotation around the center
     # t_final = t + C - sR*C
-    tx_final = tx + center_x - (a * center_x + b * center_y)
-    ty_final = ty + center_y - (c * center_x + d * center_y)
+    tx_final = tx_scaled + center_x - (a * center_x + b * center_y)
+    ty_final = ty_scaled + center_y - (c * center_x + d * center_y)
 
     return torch.stack(
         (

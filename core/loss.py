@@ -110,9 +110,13 @@ def homography_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Varia
 
     loss = torch.nn.functional.mse_loss(img1_dst, img2.tensor, reduction="none")
 
+    one_with_zero_boarder = torch.zeros_like(img1.tensor)
+    one_with_zero_boarder[:, :, 1:-1, 1:-1] = 1.0
+
     ones = warp_perspective_norm(
-        H_1_2.data.reshape(-1, 3, 3), torch.ones_like(img1.tensor)
+        H_1_2.data.reshape(-1, 3, 3), one_with_zero_boarder
     )
+
     mask = ones > 0.9
     loss = loss.view(loss.shape[0], -1)
     mask = mask.view(loss.shape[0], -1)
@@ -142,9 +146,12 @@ def sRt_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
 
     loss = torch.nn.functional.huber_loss(img1_dst, img2.tensor, reduction="none")
 
-    ones = wrap_sRt_norm(A4_1, torch.ones_like(img1.tensor))
+    one_with_zero_boarder = torch.zeros_like(img1.tensor)
+    one_with_zero_boarder[:, :, 1:-1, 1:-1] = 1.0
 
-    mask = ones > 0.95
+    ones = wrap_sRt_norm(A4_1, one_with_zero_boarder)
+
+    mask = ones > 0.90
 
     loss = loss.view(loss.shape[0], -1)
     mask = mask.view(loss.shape[0], -1)
