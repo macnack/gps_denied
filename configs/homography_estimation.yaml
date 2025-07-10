@@ -11,9 +11,12 @@ inner_optim:
   error_function: homography_error_fn
   max_iters: 50
   step_size: 0.1
+  abs_err_tolerance: 1e-8
+  rel_err_tolerance: 1e-10
 
 defaults:
   - model: simple_cnn
+  - secrets: secrets
 
 hydra:
   run:
@@ -25,7 +28,7 @@ hydra:
 
 dataset:
   name: x
-  path: /home/mackop/Github/gps-denied-uav-localization/sat_data/woodbridge/images
+  path: 
   viz_every : 50
   save_every: 150
   num_workers: 4

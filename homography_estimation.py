@@ -191,6 +191,8 @@ def run(
         linearization_cls=linearization_cls,
         max_iterations=inner_config.get("max_iters", 50),
         step_size=inner_config.get("step_size", 0.1),
+        abs_err_tolerance=inner_config.get("abs_err_tolerance", 1e-8),
+        rel_err_tolerance=inner_config.get("rel_err_tolerance", 1e-10),
     )
     theseus_layer = th.TheseusLayer(inner_optim).to(device)
 
@@ -365,10 +367,12 @@ def run(
 
 @hydra.main(config_path="./configs/", config_name="homography_estimation")
 def main(cfg):
-    mode = cfg.get("mode", "offline")
+    mode = cfg.secrets['neptune']['mode']
+    api_token = cfg.secrets['neptune']['api_token']
+    project = cfg.secrets['neptune']['project']
     log = neptune.init_run(
-        project="maciej.krupka/gps-denied",
-        api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI1NDk0MTVlYy1lZDE4LTQxNzEtYjNkNC1hMjkzOWRjMTU4YTAifQ==",
+        project=project,
+        api_token=api_token,
         mode=mode,
     )
     if mode == "offline":
