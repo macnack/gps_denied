@@ -19,6 +19,7 @@ neptune.log
 neptune/
 .neptune/
 *.log
+configs/secrets/secrets.yaml
 
 # OS files
 .DS_Store
