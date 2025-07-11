@@ -8,7 +8,7 @@ from core.loss import homography_error_fn, four_corner_dist, sRt_error_fn, param
 from core.geometry import warp_perspective_norm
 from typing import Any, Dict, List, Optional, Tuple, Type, cast
 import os
-from core.viz import write_gif_batch
+from core.viz import write_gif_batch, visualize_corner_loss
 from core.error_registry import get as get_spec
 
 img_dir = "tests/ukraine_post.jpg"
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     # )
     # objective.add(reg_cf)
     linear_solver_info = None
-    max_iterations = 500
+    max_iterations = 25
     step_size = 6e-2
     verbose = True
     device = "cpu"
@@ -148,6 +148,12 @@ if __name__ == "__main__":
 
     print(f"Final EST: {A4_1_2_tensor}")
     print(f"Orginal Homography GT: {A_true}")
+    H_1_2 = H_1_2.unsqueeze(0)
+    
+    H_rot = H_rot.unsqueeze(0)
+    
+    print("shape of H_1_2:", H_rot.shape)   
+    visualize_corner_loss(H_1_2, H_rot, training_sz_pad=10)
 
     write_gif_batch(log_dir, feat1, feat2, H_hist_pre[spec.var_name], H_rot, err_hist, func=spec.get_homography)
     print(f"GIF saved to {log_dir}/animation.gif")
@@ -156,3 +162,5 @@ if __name__ == "__main__":
     print(err_hist[0].mean().item())
     print(err_hist[0].min().item())
     print(err_hist[0].max().item())
+    
+

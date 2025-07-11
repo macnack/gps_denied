@@ -7,6 +7,9 @@ from .geometry import warp_perspective_norm
 import os
 import shutil
 from torch import Tensor
+import torch
+import matplotlib.pyplot as plt
+
 FONT = cv2.FONT_HERSHEY_DUPLEX
 FONT_SZ = 0.5
 FONT_PT = (5, 25)
@@ -54,10 +57,12 @@ def viz_warp(path, img1, img2, img1_w, iteration, err=-1.0, fc_err=-1.0):
     )
     cv2.imwrite(path, out)
 
+
 def get_homography(tensor):
     raise ValueError(
         "You must pass a 'func' argument that translates the homography tensor (e.g., func = your_tensor_converter_function)"
     )
+
 
 # write gif showing source image being warped onto target through optimisation
 def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name="animation", func=get_homography):
@@ -130,3 +135,72 @@ def tensor_to_cv2(img: Tensor) -> np.ndarray:
     img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
 
     return img_np
+
+
+def visualize_corner_loss(
+    H_p: torch.Tensor,
+    H_gt: torch.Tensor,
+    training_sz_pad: float,
+    image: np.ndarray = None,
+):
+    """
+    Visualize corner-based loss between predicted and GT homographies.
+
+    Args:
+        p (Tensor):            [8] or [1,8,1] predicted warp parameters
+        p_gt (Tensor):         same shape for ground truth
+        training_sz_pad (float): side length of your (padded) image
+        param_to_H (callable): function mapping p->[1,3,3] homography
+        image (ndarray, optional): H×W×3 array to overlay corners on
+
+    Produces two plots:
+      • scatter overlay of GT vs. predicted corners (with connecting lines)
+      • bar chart of squared‐distance error per corner
+    """
+    # -- prepare h/c deco
+    H_p = H_p.squeeze(0)
+    H_gt = H_gt.squeeze(0)
+    # make 4 corners in homogeneous coords ([3,4])
+    corners = (
+        torch.tensor(
+            [
+                [-0.5, 0.5, 0.5, -0.5],  # x coords
+                [-0.5, -0.5, 0.5, 0.5],  # y coords
+                [1.0, 1.0, 1.0, 1.0],
+            ],
+            device=H_p.device,
+        )
+        * training_sz_pad
+    )
+
+    # warp
+    warped_p = H_p.bmm(corners.unsqueeze(0))[0]
+    warped_gt = H_gt.bmm(corners.unsqueeze(0))[0]
+
+    # to 2D
+    wp = (warped_p[:2] / warped_p[2:]).cpu().numpy().T  # (4,2)
+    wgt = (warped_gt[:2] / warped_gt[2:]).cpu().numpy().T
+
+    # per‐corner squared error
+    errors = np.sum((wp - wgt) ** 2, axis=1)
+
+    # -- Plot 1: overlay
+    plt.figure()
+    if image is not None:
+        plt.imshow(image)
+    plt.scatter(wgt[:, 0], wgt[:, 1], label="GT corners")
+    plt.scatter(wp[:, 0], wp[:, 1], label="Predicted")
+    for i in range(4):
+        plt.plot([wgt[i, 0], wp[i, 0]], [wgt[i, 1], wp[i, 1]])
+    plt.legend()
+    plt.title("Corner positions: GT vs. Predicted")
+    plt.axis("equal")
+
+    # -- Plot 2: bar chart of errors
+    plt.figure()
+    plt.bar(range(4), errors)
+    plt.xlabel("Corner index")
+    plt.ylabel("Squared error")
+    plt.title("Per‐corner squared error")
+
+    plt.show()
