@@ -13,6 +13,8 @@ inner_optim:
   step_size: 0.1
   abs_err_tolerance: 1e-8
   rel_err_tolerance: 1e-10
+  damping: 1e-6
+  damping_update_factor: 2.0
 
 defaults:
   - model: simple_cnn
@@ -29,6 +31,7 @@ hydra:
 dataset:
   name: x
   path: 
+  same_pair: false
   viz_every : 50
   save_every: 150
   num_workers: 4
