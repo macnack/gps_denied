@@ -25,6 +25,7 @@ class ImageDataset(Dataset):
         num_samples: int = 10_000,
         transform: transforms.Compose | None = None,
         dict_output: bool = False,
+        same_pair: bool = False,
     ):
         super().__init__()
         self.image_paths = glob.glob(str(Path(img_dir) / "*.png"))
@@ -35,7 +36,7 @@ class ImageDataset(Dataset):
         self.training_sz      = training_sz
         self.num_samples      = num_samples          # __len__
         self.dict_output      = dict_output           # if True, return dict instead of tuple
-        
+        self.same_pair        = same_pair            # if True, use the same image for both inputs
         # augment parameter ranges
         self.lower_sz         = param_ranges["lower_sz"]
         self.upper_sz         = param_ranges["upper_sz"]
@@ -61,15 +62,13 @@ class ImageDataset(Dataset):
     def __getitem__(self, idx: int):
         """Generate ONE synthetic training triple."""
         assert 0 <= idx < self.num_samples, "Index out of bounds"
-        paths = random.sample(self.image_paths, 2)
-        img_path = paths[0]
-        temp_path = paths[0]
+        pair = 2
+        if self.same_pair:
+            pair = 1
         
-        # img      = Image.open(img_path)
-        # template = Image.open(temp_path)
-        img, template = random.sample(self.images, 2)
-        img = img.copy()
-        template = template.copy()
+        images = random.sample(self.images, pair)
+        img = images[0].copy()
+        template = images[pair-1].copy()
 
         in_W, in_H = img.size
 
@@ -142,3 +141,44 @@ class ImageDataset(Dataset):
             }
             return sample
         return warped_image, template_image, p_gt
+    
+    
+    
+def default_parameter_ranges(training_sz: int):
+    """
+    Returns default parameter ranges for homography warping.
+    """
+    assert training_sz > 0, "Training size must be positive."
+    parameter_ranges ={
+        "lower_sz": training_sz,
+        "upper_sz": training_sz,
+        "warp_pad": 0.4,
+        "min_scale": 1.0,
+        "max_scale": 1.0,
+        "angle_range": 3,
+        "projective_range": 0,
+        "translation_range": 5,
+    }
+    return parameter_ranges
+
+
+def parameter_ranges(lower_sz, upper_sz, warp_pad, min_scale, max_scale, angle_range, projective_range, translation_range):
+    """
+    Returns parameter ranges for homography warping.
+    """
+    assert lower_sz > 0 and upper_sz > 0, "Sizes must be positive."
+    assert min_scale > 0 and max_scale >= min_scale, "Scale must be positive."
+    assert angle_range >= 0, "Angle range must be non-negative."
+    assert projective_range >= 0, "Projective range must be non-negative."
+    assert translation_range >= 0, "Translation range must be non-negative."
+    
+    return {
+        "lower_sz": lower_sz,
+        "upper_sz": upper_sz,
+        "warp_pad": warp_pad,
+        "min_scale": min_scale,
+        "max_scale": max_scale,
+        "angle_range": angle_range,
+        "projective_range": projective_range,
+        "translation_range": translation_range,
+    }
