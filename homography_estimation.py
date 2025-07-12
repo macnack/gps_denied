@@ -116,6 +116,7 @@ def run(
             param_ranges=parameter_ranges,
             num_samples=dataset_config.get("num_samples", 12800),
             dict_output=True,
+            same_pair=dataset_config.get("same_pair", False),
         )
     else:
         if dataset_config["path"] is None:
@@ -193,6 +194,8 @@ def run(
         step_size=inner_config.get("step_size", 0.1),
         abs_err_tolerance=inner_config.get("abs_err_tolerance", 1e-8),
         rel_err_tolerance=inner_config.get("rel_err_tolerance", 1e-10),
+        damping=inner_config.get("damping", 1e-6),
+        damping_update_factor=inner_config.get("damping_update_factor", 1.5),
     )
     theseus_layer = th.TheseusLayer(inner_optim).to(device)
 
