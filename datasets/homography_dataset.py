@@ -2,7 +2,7 @@ from theseus.third_party.easyaug import GeoAugParam, RandomGeoAug, RandomPhotoAu
 import logging
 from PIL import Image
 import numpy as np
-import torch 
+import torch
 import cv2
 from torch.utils.data import Dataset
 import glob
@@ -77,10 +77,26 @@ class HomographyDataset(Dataset):
             img1 = self.rpa.forward(img1)
             img2 = self.rpa.forward(img2)
 
-        data = {"img1": img1[0], "img2": img2[0], "H_1_2": H_1_2[0]}
+        return img1.squeeze(0), img2.squeeze(0), H_1_2.squeeze(0)
 
-        return data
-    
+    def get_collate_fn(self):
+        def collate_fn(batch):
+            """
+            Custom collate function to handle the dataset output.
+            """
+            img1, img2, H_1_2 = zip(*batch)
+            img1 = torch.stack(img1)
+            img2 = torch.stack(img2)
+            H_1_2 = torch.stack(H_1_2)
+            return {
+                "img1": img1,
+                "img2": img2,
+                "H_1_2": H_1_2,
+            }
+
+        return collate_fn
+
+
 class HomographyAerialDataset(Dataset):
     def __init__(self, img_dirs, imgH, imgW, photo_aug=True, train=True):
         self.imgH = imgH
@@ -149,8 +165,8 @@ class HomographyAerialDataset(Dataset):
         data = {"img1": img1[0], "img2": img2[0], "H_1_2": H_1_2[0]}
 
         return data
-    
-    
+
+
 # Download and extract data
 def prepare_data():
     dataset_root = os.path.join(os.getcwd(), "data")

@@ -26,7 +26,7 @@ from theseus.core.cost_function import ErrFnType
 from theseus.third_party.easyaug import GeoAugParam, RandomGeoAug, RandomPhotoAug
 from theseus.third_party.utils import grid_sample
 
-from datasets import HomographyDataset, prepare_data, ImageDataset
+from datasets import HomographyDataset, prepare_data, ImageDataset, parameter_ranges_check
 from models import SimpleCNN, DeepCNN, vgg16Conv
 from core import (
     four_corner_dist,
@@ -69,6 +69,7 @@ def run(
     use_cnn = True
     error_function = inner_config.get("error_function", "homography_error_fn")
     error_fn = getattr(core, error_function)
+    parameter_ranges = parameter_ranges_check(parameter_ranges)
     log_params = {
         "batch_size": batch_size,
         "num_epochs": num_epochs,
@@ -115,7 +116,6 @@ def run(
             training_sz=training_sz,
             param_ranges=parameter_ranges,
             num_samples=dataset_config.get("num_samples", 12800),
-            dict_output=True,
             same_pair=dataset_config.get("same_pair", False),
         )
     else:
@@ -137,6 +137,7 @@ def run(
     log["dataset"] = dataset_log
     dataloader = DataLoader(
         dataset,
+        collate_fn=dataset.get_collate_fn(),
         batch_size=batch_size,
         shuffle=False,
         drop_last=True,
