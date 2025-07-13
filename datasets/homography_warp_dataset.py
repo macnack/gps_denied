@@ -13,6 +13,7 @@ from core.geometry import (
     param_to_A,
     warp_perspective_norm,
 )
+from theseus.third_party.easyaug import RandomPhotoAug
 import kornia
 import numpy as np
 
@@ -34,8 +35,8 @@ class ImageDataset(Dataset):
         training_sz: int,
         param_ranges: dict,
         num_samples: int = 10_000,
-        transform: transforms.Compose | None = None,
         same_pair: bool = False,
+        photo_aug: bool = False,
     ):
         super().__init__()
         self.image_paths = glob.glob(str(Path(img_dir) / "*.png"))
@@ -58,8 +59,13 @@ class ImageDataset(Dataset):
         self.training_sz_pad = round(training_sz + training_sz * 2 * self.warp_pad)
         self.pad_side = round(self.training_sz * self.warp_pad)
 
-        # misc
-        self.transform = transform or transforms.ToTensor()
+        self.photo_aug = photo_aug
+        if self.photo_aug:
+            self.rpa = RandomPhotoAug()
+            prob = 0.2  # Probability of augmentation applied.
+            mag = 0.2  # Magnitude of augmentation [0: none, 1: max]
+            self.rpa.set_all_probs(prob)
+            self.rpa.set_all_mags(mag)
 
     # ------------------------------------------------------------------ #
 
@@ -101,12 +107,12 @@ class ImageDataset(Dataset):
         # to tensor  ---------------------------------------------------- #
         img_crop = np.array(img_crop).astype(np.float32)
         img_tensor = (
-            torch.from_numpy(img_crop / 255.0).permute(2, 0, 1)[None].squeeze(0)
+            torch.from_numpy(img_crop / 255.0).permute(2, 0, 1)[None]
         )
 
         template_crop = np.asarray(template_crop).astype(np.float32)
         template_image = (
-            torch.from_numpy(template_crop / 255.0).permute(2, 0, 1)[None].squeeze(0)
+            torch.from_numpy(template_crop / 255.0).permute(2, 0, 1)[None]
         )
         # ----------------- random ground-truth params ------------------ #
         scale = random.uniform(self.min_scale, self.max_scale)
@@ -117,7 +123,15 @@ class ImageDataset(Dataset):
 
         params = torch.tensor([[scale, rad_ang, trans_x, trans_y]], dtype=torch.float32)
         H_gt = kornia.geometry.convert_affinematrix_to_homography(param_to_A(params))
-        return template_image, img_tensor, H_gt
+        
+        # apply random photometric augmentations
+        if self.photo_aug:
+            img_tensor = torch.clamp(img_tensor, 0.0, 1.0)
+            template_image = torch.clamp(template_image, 0.0, 1.0)
+            img_tensor = self.rpa.forward(img_tensor)
+            template_image = self.rpa.forward(template_image)
+        
+        return template_image.squeeze(0), img_tensor.squeeze(0), H_gt
 
     def get_collate_fn(self):
         crop = slice(self.pad_side, self.pad_side + self.training_sz)

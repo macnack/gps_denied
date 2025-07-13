@@ -117,6 +117,7 @@ def run(
             param_ranges=parameter_ranges,
             num_samples=dataset_config.get("num_samples", 12800),
             same_pair=dataset_config.get("same_pair", False),
+            photo_aug=dataset_config.get("photo_aug", False),
         )
     else:
         if dataset_config["path"] is None:
@@ -140,7 +141,7 @@ def run(
         dataset,
         collate_fn=dataset.get_collate_fn(),
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True,
         drop_last=True,
         num_workers=dataset_config.get("num_workers", 1),
     )
