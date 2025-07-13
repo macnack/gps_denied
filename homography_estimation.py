@@ -128,6 +128,7 @@ def run(
     dataset_log = {
         "imgH": imgH,
         "imgW": imgW,
+        "same_pair": dataset_config.get("same_pair", False),
         "training_sz": training_sz,
         "parameter_ranges": parameter_ranges,
         "name": dataset_config["name"],
