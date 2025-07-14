@@ -27,11 +27,11 @@ if __name__ == "__main__":
 
     img1 = crop(img, img.size[0] // 2, img.size[1] - 1000, 200, 200)
 
-    width, height = 100, 100
+    width, height = 80, 80
     img = img.resize((width, height))
 
     # [scale, rotation, translation_x, translation_y]
-    A_true = torch.tensor([[1.0, 0.4, -0.25, 0.30]], dtype=torch.float32)
+    A_true = torch.tensor([[1.0, 0.4, -0.25, -0.30]], dtype=torch.float32)
     H_rot = kornia.geometry.convert_affinematrix_to_homography(
         param_to_A(A_true))
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     # )
     # objective.add(reg_cf)
     linear_solver_info = None
-    max_iterations = 25
+    max_iterations = 30
     step_size = 6e-2
     verbose = True
     device = "cpu"
@@ -102,18 +102,23 @@ if __name__ == "__main__":
     )
     # TODO test if it is better to stop earlier for better convergence of outer loop
     # e.g higher rel_err_tolerance or lower max_iterations
-
+    Hgt_1_2_tensor = torch.load("Hgt_1_2_tensor.pt", map_location=torch.device("cpu"))
+    feat1_tensor = torch.load("feat1_tensor.pt", map_location=torch.device("cpu"))
+    feat2_tensor = torch.load("feat2_tensor.pt", map_location=torch.device("cpu"))
+    img1_tensor = torch.load("img1_tensor.pt", map_location=torch.device("cpu"))
+    img2_tensor = torch.load("img2_tensor.pt", map_location=torch.device("cpu"))
+    A4_init_batch = A4_init.repeat(img1_tensor.shape[0], 1)
     inputs: Dict[str, torch.Tensor] = {
-        spec.var_name : A4_init,
-        "feat1": tensor_img,
-        "feat2": wraped_img_tensor,
+        spec.var_name : A4_init_batch,
+        "feat1": feat1_tensor,
+        "feat2": feat2_tensor,
     }
 
     theseus_layer = th.TheseusLayer(inner_optim).to(device)
     _, info = theseus_layer.forward(
         inputs,
         optimizer_kwargs={
-            "verbose": verbose,
+            "verbose": True,
             "track_err_history": True,
             "track_state_history": True,
             "backward_mode": "implicit",
@@ -141,7 +146,7 @@ if __name__ == "__main__":
     err_hist = optimizer_info.err_history
     log_dir = os.path.join(os.getcwd(), "viz")
 
-    print(f"Final 4-corner distance: {fc_dist.item()}")
+    # print(f"Final 4-corner distance: {fc_dist.item()}")
 
     print(f"Final Homography Est: {H_1_2}")
     print(f"Final Homography GT (H8): {H_rot}")
@@ -153,11 +158,29 @@ if __name__ == "__main__":
     H_rot = H_rot.unsqueeze(0)
     
     print("shape of H_1_2:", H_rot.shape)   
-    visualize_corner_loss(H_1_2, H_rot, training_sz_pad=10)
+    # visualize_corner_loss(H_1_2, H_rot, training_sz_pad=10)
 
     write_gif_batch(log_dir, feat1, feat2, H_hist_pre[spec.var_name], H_rot, err_hist, func=spec.get_homography)
     print(f"GIF saved to {log_dir}/animation.gif")
-
+    print(f"Final error: {err_hist[0]}")
+    
+    # show on plot step ( dx, x[n] - x[n-1]), thour all elemtns
+    import numpy as np
+    dx = np.diff(err_hist[0].cpu().numpy())
+    print(f"Error differences: {dx}")
+    # plot here
+    import matplotlib.pyplot as plt
+    #plt.plot(err_hist[0].cpu().numpy(), label="Error history")e
+    # plt.plot(dx, label="Error difference")
+    # plt.xlabel("Iteration")
+    # plt.ylabel("Error")
+    # plt.show()
+    
+    # mean step from 50 to 100
+    mean = np.mean(dx[50:100])
+    print(f"Mean step from 50 to 100: {mean}")
+    
+    
     print(err_hist[0][-1].item())
     print(err_hist[0].mean().item())
     print(err_hist[0].min().item())
