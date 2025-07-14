@@ -26,7 +26,7 @@ from theseus.core.cost_function import ErrFnType
 from theseus.third_party.easyaug import GeoAugParam, RandomGeoAug, RandomPhotoAug
 from theseus.third_party.utils import grid_sample
 
-from datasets import HomographyDataset, prepare_data, ImageDataset, parameter_ranges_check
+from datasets import HomographyDataset, prepare_data, ImageDataset, parameter_ranges_check, update_augmentation_difficulty
 from models import SimpleCNN, DeepCNN, vgg16Conv
 from core import (
     four_corner_dist,
@@ -64,7 +64,7 @@ def run(
     dataset_config: Dict[str, Any] = None,
     parameter_ranges: Dict[str, Any] = None,
 ) -> List[List[Dict[str, Any]]]:
-    verbose = True
+    verbose = False
     use_gpu = True
     use_cnn = True
     error_function = inner_config.get("error_function", "homography_error_fn")
@@ -246,7 +246,13 @@ def run(
                 feat2_tensor = img2
 
             init_tensor = spec.init_fn(batch_size, device)
-
+            # SAVE BATCH TO DEBUG PURPOSE
+            torch.save(img1, "img1_tensor.pt")
+            torch.save(img2, "img2_tensor.pt")
+            torch.save(Hgt_1_2, "Hgt_1_2_tensor.pt")
+            torch.save(feat1_tensor, "feat1_tensor.pt")
+            torch.save(feat2_tensor, "feat2_tensor.pt")
+            
             inputs: Dict[str, torch.Tensor] = {
                 spec.var_name: init_tensor,
                 "feat1": feat1_tensor,
@@ -335,6 +341,10 @@ def run(
             itr += 1
         avg_epoch_loss = float(epoch_loss / len(dataloader))
         log["epoch/epoch_loss"].log(avg_epoch_loss)
+        # if dataset_config["name"] == "aerial":
+        #     new_param = update_augmentation_difficulty(epoch, avg_epoch_loss, dataset)
+        #     if new_param:
+        #         log[f"dataset/parameter_ranges_{epoch}"] = dataset.get_parameter_ranges()
         logger.info(
             "--------------1-------------------------------------------------"
             "---------------------------"
