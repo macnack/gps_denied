@@ -106,14 +106,10 @@ class ImageDataset(Dataset):
 
         # to tensor  ---------------------------------------------------- #
         img_crop = np.array(img_crop).astype(np.float32)
-        img_tensor = (
-            torch.from_numpy(img_crop / 255.0).permute(2, 0, 1)[None]
-        )
+        img_tensor = torch.from_numpy(img_crop / 255.0).permute(2, 0, 1)[None]
 
         template_crop = np.asarray(template_crop).astype(np.float32)
-        template_image = (
-            torch.from_numpy(template_crop / 255.0).permute(2, 0, 1)[None]
-        )
+        template_image = torch.from_numpy(template_crop / 255.0).permute(2, 0, 1)[None]
         # ----------------- random ground-truth params ------------------ #
         scale = random.uniform(self.min_scale, self.max_scale)
         angle = random.uniform(-self.angle_range, self.angle_range)
@@ -123,14 +119,14 @@ class ImageDataset(Dataset):
 
         params = torch.tensor([[scale, rad_ang, trans_x, trans_y]], dtype=torch.float32)
         H_gt = kornia.geometry.convert_affinematrix_to_homography(param_to_A(params))
-        
+
         # apply random photometric augmentations
         if self.photo_aug:
             img_tensor = torch.clamp(img_tensor, 0.0, 1.0)
             template_image = torch.clamp(template_image, 0.0, 1.0)
             img_tensor = self.rpa.forward(img_tensor)
             template_image = self.rpa.forward(template_image)
-        
+
         return template_image.squeeze(0), img_tensor.squeeze(0), H_gt
 
     def get_collate_fn(self):
@@ -158,6 +154,16 @@ class ImageDataset(Dataset):
 
         return collate_fn
 
+    def update_parameter_ranges(self, new_ranges: dict):
+        self.lower_sz = new_ranges["lower_sz"]
+        self.upper_sz = new_ranges["upper_sz"]
+        self.warp_pad = new_ranges["warp_pad"]
+        self.min_scale = new_ranges["min_scale"]
+        self.max_scale = new_ranges["max_scale"]
+        self.angle_range = new_ranges["angle_range"]
+        self.projective_range = new_ranges["projective_range"]
+        self.translation_range = new_ranges["translation_range"]
+
 
 def default_parameter_ranges(training_sz: int):
     """
@@ -181,11 +187,17 @@ def parameter_ranges_check(parmaters: dict):
     """
     Returns parameter ranges for homography warping.
     """
-    assert parmaters["lower_sz"] > 0 and parmaters["upper_sz"] > 0, "Sizes must be positive."
-    assert parmaters["min_scale"] > 0 and parmaters["max_scale"] >= parmaters["min_scale"], "Scale must be positive."
+    assert (
+        parmaters["lower_sz"] > 0 and parmaters["upper_sz"] > 0
+    ), "Sizes must be positive."
+    assert (
+        parmaters["min_scale"] > 0 and parmaters["max_scale"] >= parmaters["min_scale"]
+    ), "Scale must be positive."
     assert parmaters["angle_range"] >= 0, "Angle range must be non-negative."
     assert parmaters["projective_range"] >= 0, "Projective range must be non-negative."
-    assert parmaters["translation_range"] >= 0.0 and parmaters["translation_range"] <= 1.0, "Translation range must be in [0, 1]."
+    assert (
+        parmaters["translation_range"] >= 0.0 and parmaters["translation_range"] <= 1.0
+    ), "Translation range must be in [0, 1]."
 
     return {
         "lower_sz": parmaters["lower_sz"],
