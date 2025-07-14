@@ -154,16 +154,54 @@ class ImageDataset(Dataset):
 
         return collate_fn
 
-    def update_parameter_ranges(self, new_ranges: dict):
-        self.lower_sz = new_ranges["lower_sz"]
-        self.upper_sz = new_ranges["upper_sz"]
-        self.warp_pad = new_ranges["warp_pad"]
-        self.min_scale = new_ranges["min_scale"]
-        self.max_scale = new_ranges["max_scale"]
-        self.angle_range = new_ranges["angle_range"]
-        self.projective_range = new_ranges["projective_range"]
-        self.translation_range = new_ranges["translation_range"]
+    def update_parameter_ranges(self, new_ranges: dict) -> bool:
+        """
+        Updates the dataset's parameter ranges from a dictionary.
 
+        Args:
+            new_ranges (dict): A dictionary containing the new parameter ranges.
+                               Keys should match the class attribute names.
+
+        Returns:
+            bool: True if any parameter value was changed, False otherwise.
+        """
+        changed = False
+        params_to_update = [
+            "lower_sz", "upper_sz", "warp_pad", "min_scale", "max_scale",
+            "angle_range", "projective_range", "translation_range"
+        ]
+
+        for param in params_to_update:
+            if param in new_ranges:
+                current_value = getattr(self, param)
+                new_value = new_ranges[param]
+                if current_value != new_value:
+                    setattr(self, param, new_value)
+                    changed = True
+
+        # If warp_pad was changed, we must recalculate dependent parameters
+        if changed and 'warp_pad' in new_ranges:
+            # Check if warp_pad specifically was the reason for the change,
+            # though recalculating every time `changed` is true is also safe.
+            self.training_sz_pad = round(self.training_sz + self.training_sz * 2 * self.warp_pad)
+            self.pad_side = round(self.training_sz * self.warp_pad)
+
+        return changed
+    
+    def get_parameter_ranges(self) -> dict:
+        """
+        Returns the current parameter ranges as a dictionary.
+        """
+        return {
+            "lower_sz": self.lower_sz,
+            "upper_sz": self.upper_sz,
+            "warp_pad": self.warp_pad,
+            "min_scale": self.min_scale,
+            "max_scale": self.max_scale,
+            "angle_range": self.angle_range,
+            "projective_range": self.projective_range,
+            "translation_range": self.translation_range,
+        }
 
 def default_parameter_ranges(training_sz: int):
     """
