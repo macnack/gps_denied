@@ -151,13 +151,12 @@ def sRt_error_fn(optim_vars: Tuple[th.Manifold], aux_vars: Tuple[th.Variable]):
 
     ones = wrap_sRt_norm(A4_1, one_with_zero_boarder)
 
-    mask = (ones > 0.90).float()
+    mask = torch.sigmoid( (ones - 0.90) * 10 )
     
     loss = loss.view(loss.shape[0], -1)
     mask = mask.view(loss.shape[0], -1)
 
     loss = (loss * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True).clamp(min=1)
-    loss = torch.nan_to_num(loss, nan=0.0, posinf=1e4, neginf=-1e4)
 
     return loss * 100.0
 
