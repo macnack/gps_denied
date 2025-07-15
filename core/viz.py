@@ -9,6 +9,7 @@ import shutil
 from torch import Tensor
 import torch
 import matplotlib.pyplot as plt
+import imageio
 
 FONT = cv2.FONT_HERSHEY_DUPLEX
 FONT_SZ = 0.5
@@ -25,12 +26,6 @@ def put_text(img, text, top=True):
     cv2.putText(img, text, pt, FONT, FONT_SZ, (255, 255, 255), 2, lineType=16)
     cv2.putText(img, text, pt, FONT, FONT_SZ, (0, 0, 0), 1, lineType=16)
     return img
-
-
-def torch2cv2(img):
-    out = (img.permute(1, 2, 0) * 255.0).data.cpu().numpy().astype(np.uint8)[:, :, ::-1]
-    out = np.ascontiguousarray(out)
-    return out
 
 
 def viz_warp(path, img1, img2, img1_w, iteration, err=-1.0, fc_err=-1.0):
@@ -57,6 +52,26 @@ def viz_warp(path, img1, img2, img1_w, iteration, err=-1.0, fc_err=-1.0):
     )
     cv2.imwrite(path, out)
 
+def viz_warp_to_memory(img1, img2, img1_w, iteration, err=-1.0, fc_err=-1.0):
+    # ... (all the same processing as viz_warp)
+    img_diff = tensor_to_cv2(abs(img1_w - img2))
+    img1 = tensor_to_cv2(img1)
+    img2 = tensor_to_cv2(img2)
+    img1_w = tensor_to_cv2(img1_w)
+    factor = 2
+    new_sz = int(factor * img1.shape[1]), int(factor * img1.shape[0])
+    img1 = cv2.resize(img1, new_sz, interpolation=cv2.INTER_NEAREST)
+    img2 = cv2.resize(img2, new_sz, interpolation=cv2.INTER_NEAREST)
+    img1_w = cv2.resize(img1_w, new_sz, interpolation=cv2.INTER_NEAREST)
+    img_diff = cv2.resize(img_diff, new_sz, interpolation=cv2.INTER_NEAREST)
+    out = np.concatenate([img1, img2, img1_w, img_diff], axis=1)
+    out = put_text(
+        out,
+        "iter: %05d, loss: %.8f, fc_err: %.3f px" % (iteration, err, fc_err),
+        top=False,
+    )
+    return out # Return the numpy array
+
 
 def get_homography(tensor):
     raise ValueError(
@@ -67,11 +82,11 @@ def get_homography(tensor):
 # write gif showing source image being warped onto target through optimisation
 def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name="animation", func=get_homography):
     anim_dir = f"{log_dir}/{name}"
-    os.makedirs(anim_dir, exist_ok=True)
     subsample_anim = 1
     H8_1_2_hist = H_hist
     num_iters = (~err_hist[0].isinf()).sum().item()
-    for it in range(num_iters):
+    frames = []
+    for it in range(num_iters-1):
         if it % subsample_anim != 0:
             continue
         # Visualize only first element in batch.
@@ -85,13 +100,13 @@ def write_gif_batch(log_dir, img1, img2, H_hist, Hgt_1_2, err_hist, name="animat
         img1 = img1[0][None, ...]
         img2 = img2[0][None, ...]
         img1_dsts = warp_perspective_norm(H_1_2_mat, img1)
-        path = os.path.join(anim_dir, f"{it:05d}.png")
-        viz_warp(path, img1[0], img2[0], img1_dsts[0], it, err=err, fc_err=fc_err)
+        frame = viz_warp_to_memory(img1[0], img2[0], img1_dsts[0], it, err=err, fc_err=fc_err)
+        frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
     anim_path = os.path.join(log_dir, f"{name}.gif")
     cmd = f"convert -delay 10 -loop 0 {anim_dir}/*.png {anim_path}"
     logger.info("Generating gif here: %s" % anim_path)
-    os.system(cmd)
-    shutil.rmtree(anim_dir)
+    imageio.mimsave(anim_path, frames, duration=100) # duration is in ms
     return
 
 
