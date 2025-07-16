@@ -30,7 +30,11 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86
     rm ~/miniconda.sh
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-RUN conda create -y -n ${CONDA_ENV_NAME} python=${PYTHON_VERSION}
+RUN conda init bash && \
+    conda config --set always_yes yes && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
+    conda create -y -n ${CONDA_ENV_NAME} python=${PYTHON_VERSION}
 ENV PATH=$CONDA_DIR/envs/${CONDA_ENV_NAME}/bin:$PATH
 RUN echo "source activate ${CONDA_ENV_NAME}" >> ~/.bashrc
 
