@@ -3,42 +3,37 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import glob
 import logging
 import os
 import pathlib
-import shutil
 import sys
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
-import cv2
 import hydra
-import kornia
 import numpy as np
 import torch
-import torch.nn as nn
-from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 import theseus as th
 from theseus.core.cost_function import ErrFnType
-from theseus.third_party.easyaug import GeoAugParam, RandomGeoAug, RandomPhotoAug
-from theseus.third_party.utils import grid_sample
 
-from datasets import HomographyDataset, prepare_data, ImageDataset, parameter_ranges_check
+from datasets import (
+    HomographyDataset,
+    prepare_data,
+    ImageDataset,
+    parameter_ranges_check,
+)
 from models import SimpleCNN, DeepCNN, vgg16Conv
 from core import (
     four_corner_dist,
     write_gif_batch,
     compute_grad_norm,
-    normalize_img_batch,
 )
 from core.error_registry import get as get_spec
 
 import core
 import neptune
-from torch.utils.data import random_split
 
 if not sys.warnoptions:
     warnings.filterwarnings("ignore", category=UserWarning)
@@ -158,7 +153,7 @@ def run(
     objective = th.Objective()
 
     data = next(iter(dataloader))
-    
+
     spec = get_spec(error_function)
     init_tensor = spec.init_fn(batch_size, device)
     Optim_var = th.Vector(tensor=init_tensor, name=spec.var_name)
@@ -347,7 +342,9 @@ def run(
         logger.info(f"Forward pass took {sum(forward_times)} ms/epoch.")
         logger.info(f"Forward pass took {sum(forward_mems)/len(forward_mems)} MBs.")
         log["performance/forward_time_total_ms"].append(sum(forward_times))
-        log["performance/forward_memory_avg_MB"].append(sum(forward_mems) / len(forward_mems))
+        log["performance/forward_memory_avg_MB"].append(
+            sum(forward_mems) / len(forward_mems)
+        )
         # logger.info(f"benchmarking_costs: {benchmarking_costs}")
         if not benchmarking_costs:
             logger.info(f"Backward pass took {sum(backward_times)} ms/epoch.")
@@ -373,9 +370,9 @@ def run(
 
 @hydra.main(config_path="./configs/", config_name="homography_estimation")
 def main(cfg):
-    mode = cfg.secrets['neptune']['mode']
-    api_token = cfg.secrets['neptune']['api_token']
-    project = cfg.secrets['neptune']['project']
+    mode = cfg.secrets["neptune"]["mode"]
+    api_token = cfg.secrets["neptune"]["api_token"]
+    project = cfg.secrets["neptune"]["project"]
     log = neptune.init_run(
         project=project,
         api_token=api_token,
