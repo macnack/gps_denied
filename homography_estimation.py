@@ -121,16 +121,10 @@ def run(
         else:
             dataset_paths = [dataset_config["path"]]
         dataset = HomographyDataset(dataset_paths, imgH, imgW)
-    dataset_log = {
-        "imgH": imgH,
-        "imgW": imgW,
-        "same_pair": dataset_config.get("same_pair", False),
-        "training_sz": training_sz,
-        "parameter_ranges": parameter_ranges,
-        "name": dataset_config["name"],
-        "path": dataset_config["path"],
-        "num_samples": len(dataset),
-    }
+    dataset_log = dict(dataset_config)
+    dataset_log["training_sz"] = training_sz
+    dataset_log["parameter_ranges"] = parameter_ranges
+    dataset_log["num_samples"] = len(dataset)
     log["dataset"] = dataset_log
     dataloader = DataLoader(
         dataset,
@@ -140,12 +134,8 @@ def run(
         drop_last=True,
         num_workers=dataset_config.get("num_workers", 1),
     )
-    model_log = {
-        "name": model_cfg._target_.split(".")[-1],
-        "channels": model_cfg.get("D", 1),
-        "blur_type": model_cfg.get("blur_type", "none"),
-    }
-    log["model"] = model_log
+    log["model"] = dict(model_cfg)
+    log["inner_optim"] = dict(inner_config)
 
     cnn_model = hydra.utils.instantiate(model_cfg)
     cnn_model.to(device)
