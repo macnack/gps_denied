@@ -204,6 +204,9 @@ def run(
         "---------------------------"
     )
     cnn_model.train()
+    best_loss = float('inf')
+    patience = 5
+    epochs_without_improvement = 0
     # benchmark_results[i][j] has the results (time/mem) for epoch i and batch j
     benchmark_results: List[List[Dict[str, Any]]] = []
     for epoch in range(num_epochs):
@@ -353,7 +356,20 @@ def run(
                 value = param.detach().cpu().numpy()
                 log[f"weights_hist/{name}"].append(value.mean())
                 log[f"weights_hist/{name}_std"].append(value.std())
+                log[f"weights_hist/{name}_min"].append(value.min())
+                log[f"weights_hist/{name}_max"].append(value.max())
+        if avg_epoch_loss < best_loss:
+            best_loss = avg_epoch_loss
+            epochs_without_improvement = 0
+            best_model_path = os.path.join(checkpoint_dir, f"best_model_{id_name}.ckpt")
+            torch.save({"epoch": epoch, "cnn_model": cnn_model}, best_model_path)
+        else:
+            epochs_without_improvement += 1
+            logger.info(f"No improvement for {epochs_without_improvement} epoch(s)")
 
+        if epochs_without_improvement >= patience:
+            logger.info(f"Early stopping triggered after {epoch + 1} epochs.")
+            break
     return benchmark_results
 
 
