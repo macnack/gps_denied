@@ -161,7 +161,7 @@ def run(
     objective.add(homography_cf)
 
     # Regularization helps avoid crash with using implicit mode.
-    reg_w_value = 1e-2
+    reg_w_value = inner_config.get("reg_w_value", 1e-2)
     reg_w = th.ScaleCostWeight(np.sqrt(reg_w_value))
     reg_w.to(dtype=init_tensor.dtype)
     Optim_var_id = th.Vector(tensor=spec.id_vals, name="identity")
@@ -231,7 +231,7 @@ def run(
                 feat2_tensor = img2
 
             init_tensor = spec.init_fn(batch_size, device)
-
+            
             inputs: Dict[str, torch.Tensor] = {
                 spec.var_name: init_tensor,
                 "feat1": feat1_tensor,
@@ -239,7 +239,6 @@ def run(
             }
             start_event.record()
             torch.cuda.reset_peak_memory_stats()
-
             if benchmarking_costs:
                 objective.update(inputs)
                 inner_optim.linear_solver.linearization.linearize()
