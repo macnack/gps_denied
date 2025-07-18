@@ -1,0 +1,8 @@
+defaults:
+  - /homography_estimation
+  - override hydra/sweeper: basic
+
+hydra:
+  sweeper:
+    params:
+      inner_optim.reg_w_value: 1e-6,1e-5,1e-4,1e-3,1e-2,1e-1,1.0,10.0,100.0
