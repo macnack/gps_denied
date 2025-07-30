@@ -396,7 +396,10 @@ def run(
             )
             if dataset.update_parameter_ranges(new_param_ranges):
                 parameter_ranges = dataset.get_parameter_ranges()
-                dataset_log["parameter_ranges"] = parameter_ranges
+                log["parameter_ranges_update/translation_range"].log(parameter_ranges["translation_range"])
+                log["parameter_ranges_update/angle_range"].log(parameter_ranges["angle_range"])
+                log["parameter_ranges_update/min_scale"].log(parameter_ranges["min_scale"])
+                log["parameter_ranges_update/max_scale"].log(parameter_ranges["max_scale"])
                 logger.info("Parameter ranges updated.")
         
         
