@@ -23,6 +23,7 @@ from datasets import (
     prepare_data,
     ImageDataset,
     parameter_ranges_check,
+    update_parameter_ranges,
 )
 from models import SimpleCNN, DeepCNN, vgg16Conv
 from core import (
@@ -46,10 +47,6 @@ def run(
     log,
     id_name: str,
     model_cfg,
-    batch_size: int = 2,
-    num_epochs: int = 20,
-    outer_lr: float = 1e-4,
-    device_param: int = 0,
     inner_config: Dict[str, Any] = None,
     autograd_mode: str = "vmap",
     benchmarking_costs: bool = False,
@@ -57,18 +54,23 @@ def run(
         Tuple[Type[th.LinearSolver], Type[th.Linearization]]
     ] = None,
     dataset_config: Dict[str, Any] = None,
-    parameter_ranges: Dict[str, Any] = None,
+    parameter_ranges_config: Dict[str, Any] = None,
+    outer_config: Dict[str, Any] = None,
 ) -> List[List[Dict[str, Any]]]:
     verbose = True
     use_gpu = True
     use_cnn = True
+    batch_size = outer_config.get("batch_size", 2)
+    num_epochs = outer_config.get("num_epochs", 20)
+    outer_lr = outer_config.get("outer_lr", 1e-4)
+    device_param = outer_config.get("device", 0)
     error_function = inner_config.get("error_function", "homography_error_fn")
     if error_function == "sRt_error_fn_with_barrier":
         core.BARRIER_ALPHA = inner_config.error_fn_kwargs.get("barrier_alpha", core.BARRIER_ALPHA)
         core.BARRIER_K = inner_config.error_fn_kwargs.get("barrier_k", core.BARRIER_K)
         core.BARRIER_LIMIT = inner_config.error_fn_kwargs.get("barrier_limit", core.BARRIER_LIMIT)
     error_fn = getattr(core, error_function)
-    parameter_ranges = parameter_ranges_check(parameter_ranges)
+    parameter_ranges = parameter_ranges_check(parameter_ranges_config)
     log_params = {
         "batch_size": batch_size,
         "num_epochs": num_epochs,
@@ -209,8 +211,11 @@ def run(
     )
     cnn_model.train()
     best_loss = float('inf')
-    patience = 5
+    patience = outer_config.get("early_stopping_patience", 0)
+    use_early_stopping = patience > 0
     epochs_without_improvement = 0
+    start_update_param_ranges = outer_config.get("start_update_param_ranges", 0)
+    
     # benchmark_results[i][j] has the results (time/mem) for epoch i and batch j
     benchmark_results: List[List[Dict[str, Any]]] = []
     for epoch in range(num_epochs):
@@ -371,9 +376,33 @@ def run(
             epochs_without_improvement += 1
             logger.info(f"No improvement for {epochs_without_improvement} epoch(s)")
 
-        if epochs_without_improvement >= patience:
+        if use_early_stopping and epochs_without_improvement >= patience:
             logger.info(f"Early stopping triggered after {epoch + 1} epochs.")
             break
+        ## update params
+        if start_update_param_ranges > 0 and epoch >= start_update_param_ranges:
+            new_param_ranges = update_parameter_ranges(
+                epoch,
+                start_translation=parameter_ranges["translation_range"],
+                end_translation=parameter_ranges_config.get("goal_translation_range", 0.2),
+                translation_max_epoch=parameter_ranges_config.get("translation_range_epoch", 30),
+                start_angle=parameter_ranges["angle_range"],
+                end_angle=parameter_ranges_config.get("goal_angle_range", 20.0),
+                angle_max_epoch=parameter_ranges_config.get("angle_epoch", 30),
+                init_scale=(parameter_ranges["min_scale"], parameter_ranges["max_scale"]),
+                goal_scale=(parameter_ranges_config.get("goal_min_scale", 0.75),
+                            parameter_ranges_config.get("goal_max_scale", 1.25)),
+                scale_max_epoch=parameter_ranges_config.get("scale_max_epoch", 100),
+            )
+            if dataset.update_parameter_ranges(new_param_ranges):
+                parameter_ranges = dataset.get_parameter_ranges()
+                log["parameter_ranges_update/translation_range"].log(parameter_ranges["translation_range"])
+                log["parameter_ranges_update/angle_range"].log(parameter_ranges["angle_range"])
+                log["parameter_ranges_update/min_scale"].log(parameter_ranges["min_scale"])
+                log["parameter_ranges_update/max_scale"].log(parameter_ranges["max_scale"])
+                logger.info("Parameter ranges updated.")
+        
+        
     return benchmark_results
 
 
@@ -395,15 +424,12 @@ def main(cfg):
         log,
         id_name=id_name,
         model_cfg=cfg.model,
-        batch_size=cfg.outer_optim.batch_size,
-        outer_lr=cfg.outer_optim.lr,
-        device_param=cfg.outer_optim.device,
-        num_epochs=cfg.outer_optim.num_epochs,
         inner_config=cfg.inner_optim,
         autograd_mode=cfg.autograd_mode,
         benchmarking_costs=cfg.benchmarking_costs,
         dataset_config=cfg.dataset,
-        parameter_ranges=cfg.parameter_ranges,
+        parameter_ranges_config=cfg.parameter_ranges,
+        outer_config=cfg.outer_optim,
         linear_solver_info=cfg.get("linear_solver_info", None),
     )
     torch.save(
