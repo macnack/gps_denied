@@ -63,6 +63,10 @@ def run(
     use_gpu = True
     use_cnn = True
     error_function = inner_config.get("error_function", "homography_error_fn")
+    if error_function == "sRt_error_fn_with_barrier":
+        core.BARRIER_ALPHA = inner_config.error_fn_kwargs.get("barrier_alpha", core.BARRIER_ALPHA)
+        core.BARRIER_K = inner_config.error_fn_kwargs.get("barrier_k", core.BARRIER_K)
+        core.BARRIER_LIMIT = inner_config.error_fn_kwargs.get("barrier_limit", core.BARRIER_LIMIT)
     error_fn = getattr(core, error_function)
     parameter_ranges = parameter_ranges_check(parameter_ranges)
     log_params = {
