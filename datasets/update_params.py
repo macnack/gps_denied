@@ -1,23 +1,37 @@
-def get_translation(epoch, max_epoch=30, start=0.05, end=0.2):
+def get_translation(epoch, max_epoch=30, start=0.05, end=0.2, step=0.01):
     if epoch >= max_epoch:
-        return end
+        value = end
     else:
-        return start + (end - start) * (epoch / max_epoch)
+        value = start + (end - start) * (epoch / max_epoch)
+
+    if step is not None:
+        value = round(value / step) * step
+
+    return value
 
 
-def get_angle(epoch, max_epoch=30, start=3, end=20):
+def get_angle(epoch, max_epoch=30, start=3, end=20, step=0.5):
     if epoch >= max_epoch:
-        return end
+        value = end
     else:
-        return start + (end - start) * (epoch / max_epoch)
+        value = start + (end - start) * (epoch / max_epoch)
+
+    if step is not None:
+        value = round(value / step) * step
+
+    return value
 
 
-def get_scale_range(
+def get_scale(
     epoch,
     max_epoch=50,
     init_scale: tuple = (1.0, 1.0),
     goal_scale: tuple = (0.75, 1.25),
+    step: float = 0.05,
 ):
+    def quantize(x, step):
+        return round(x / step) * step
+
     start_min, start_max = init_scale
     end_min, end_max = goal_scale
     if epoch >= max_epoch:
@@ -25,7 +39,43 @@ def get_scale_range(
     t = epoch / max_epoch
     min_scale = start_min + (end_min - start_min) * t
     max_scale = start_max + (end_max - start_max) * t
-    return (min_scale, max_scale)
+    return (quantize(min_scale, step), quantize(max_scale, step))
+
+
+def update_parameter_ranges(
+    epoch,
+    start_translation: float = 0.05,
+    end_translation: float = 0.2,
+    translation_max_epoch: int = 30,
+    start_angle: float = 3,
+    end_angle: float = 20,
+    angle_max_epoch: int = 30,
+    init_scale: tuple = (1.0, 1.0),
+    goal_scale: tuple = (0.75, 1.25),
+    scale_max_epoch: int = 50,
+):
+    new_translation = get_translation(
+        epoch,
+        max_epoch=translation_max_epoch,
+        start=start_translation,
+        end=end_translation,
+    )
+    new_angle = get_angle(
+        epoch, max_epoch=angle_max_epoch, start=start_angle, end=end_angle
+    )
+    new_scale = get_scale(
+        epoch,
+        max_epoch=scale_max_epoch,
+        init_scale=init_scale,
+        goal_scale=goal_scale,
+    )
+    parameter_ranges = {
+        "min_scale": new_scale[0],
+        "max_scale": new_scale[1],
+        "angle_range": new_angle,
+        "translation_range": new_translation,
+    }
+    return parameter_ranges
 
 
 def default_parameter_ranges(training_sz: int):
